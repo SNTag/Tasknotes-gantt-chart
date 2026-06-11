@@ -1,1 +1,89 @@
-# Tasknotes-gantt-chart
+# TaskNotes Gantt Chart
+
+An Obsidian plugin that generates a **Gantt chart in a database view format** from your [TaskNotes](https://github.com/callumalpass/tasknotes)-style notes (one note per task, metadata in YAML frontmatter).
+
+Each task row shows database columns (task, status, priority, start, end) pinned on the left, with a scrollable timeline of Gantt bars on the right. Tasks are grouped by their linked project.
+
+## How it works
+
+The plugin scans your vault for notes tagged with your task tag (default: `task`) and reads frontmatter like:
+
+```yaml
+---
+title: Draft project proposal
+date created: 2026-06-04T14:31:03-04:00
+date modified: 2026-06-04T17:16:55-04:00
+tags:
+  - task
+status: in-progress
+priority: ""
+projects:
+  - "[[Notes/Example Project/Example Project Overview]]"
+---
+```
+
+For each task it determines:
+
+| Bar | Field(s) used (first match wins, configurable in settings) |
+| --- | --- |
+| **Start** | `scheduled`, `start`, `startDate` → falls back to `date created` / `dateCreated` |
+| **End** | `due`, `end`, `endDate`, `deadline` → for done tasks falls back to `completedDate` / `date modified`; for open tasks the bar runs to **today** (drawn with a dashed edge to show the end is inferred) |
+| **Group** | first entry in `projects` (wikilinks are resolved to a display name) |
+| **Color** | `status` — open (gray), in-progress (blue), done (green), cancelled (faded); overdue tasks get a red outline |
+
+## Features
+
+- **Database view layout** — sticky columns (Task / Status / Priority / Start / End) plus timeline bars, grouped by project.
+- **Toolbar** — text filter, Day/Week/Month zoom, group-by-project toggle, show/hide completed, manual refresh.
+- **Live updates** — the chart refreshes automatically when your notes change.
+- **Click to open** — clicking a task name or its bar opens the note (Ctrl/Cmd-click opens in a new tab).
+- **Today marker** — a red vertical line marks the current date.
+- **Configurable** — task tag, task folder, all frontmatter field names, and status values can be changed in the plugin settings, so it adapts to your TaskNotes configuration.
+
+## Installation (manual)
+
+1. Download `main.js`, `manifest.json`, and `styles.css` from this repository (or from the latest [release](../../releases)).
+2. In your vault, create the folder `.obsidian/plugins/tasknotes-gantt/` and copy the three files into it.
+3. In Obsidian, go to **Settings → Community plugins**, refresh the list of installed plugins, and enable **TaskNotes Gantt Chart**.
+4. Open the chart from the ribbon icon or the command palette: **TaskNotes Gantt Chart: Open Gantt chart**.
+
+### Installation via BRAT
+
+If you use the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin, add this repository (`example-user/Tasknotes-gantt-chart`) as a beta plugin. (Requires a published release — see below.)
+
+## Building from source
+
+```bash
+npm install
+npm run build   # produces main.js
+```
+
+For development with rebuild-on-save: `npm run dev`.
+
+## Releasing
+
+Tag a version to trigger the GitHub Action that builds the plugin and attaches `main.js`, `manifest.json`, and `styles.css` to a draft release:
+
+```bash
+git tag 0.1.0
+git push origin 0.1.0
+```
+
+## Settings
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| Task tag | `task` | Frontmatter tag that marks a note as a task |
+| Task folder | *(empty)* | Limit scanning to one folder |
+| Start date fields | `scheduled, start, startDate` | Frontmatter keys for the bar start |
+| End date fields | `due, end, endDate, deadline` | Frontmatter keys for the bar end |
+| Created date fields | `date created, dateCreated, created` | Fallback start |
+| Completed date fields | `completedDate, completed, date modified, dateModified` | Fallback end for done tasks |
+| Done / Cancelled statuses | `done, complete, completed` / `cancelled, canceled, dropped` | Status classification |
+| Default zoom | Week | Day / Week / Month |
+| Group by project | On | Group rows under the first `projects` link |
+| Show completed tasks | On | Include done/cancelled tasks |
+
+## License
+
+MIT

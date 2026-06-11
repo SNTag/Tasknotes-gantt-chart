@@ -1,0 +1,304 @@
+/* ===== TaskNotes Gantt Chart ===== */
+
+.tg-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: 0;
+}
+
+/* --- Toolbar --- */
+
+.tg-toolbar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	flex: 0 0 auto;
+}
+
+.tg-filter {
+	width: 180px;
+}
+
+.tg-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	user-select: none;
+}
+
+.tg-refresh {
+	margin-left: auto;
+}
+
+/* --- Chart layout --- */
+
+.tg-chart {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.tg-container {
+	height: 100%;
+}
+
+.tg-empty {
+	padding: 24px;
+	color: var(--text-muted);
+}
+
+.tg-scroller {
+	height: 100%;
+	overflow: auto;
+}
+
+.tg-table {
+	width: max-content;
+	min-width: 100%;
+	font-size: var(--font-ui-small);
+}
+
+.tg-row {
+	display: flex;
+	align-items: stretch;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* Database-style columns, pinned while the timeline scrolls. */
+.tg-meta {
+	display: flex;
+	position: sticky;
+	left: 0;
+	z-index: 2;
+	background: var(--background-primary);
+	border-right: 2px solid var(--background-modifier-border);
+	flex: 0 0 auto;
+}
+
+.tg-cell {
+	box-sizing: border-box;
+	padding: 4px 8px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+}
+
+.tg-col-title {
+	width: 220px;
+}
+
+.tg-col-status {
+	width: 110px;
+}
+
+.tg-col-priority {
+	width: 80px;
+}
+
+.tg-col-date {
+	width: 95px;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+/* --- Header --- */
+
+.tg-header {
+	position: sticky;
+	top: 0;
+	z-index: 3;
+	background: var(--background-secondary);
+	font-weight: 600;
+}
+
+.tg-header .tg-meta {
+	background: var(--background-secondary);
+}
+
+.tg-timeline-header {
+	position: relative;
+	height: 40px;
+}
+
+.tg-scale-months,
+.tg-scale-ticks {
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 20px;
+}
+
+.tg-scale-ticks {
+	top: 20px;
+}
+
+.tg-month {
+	position: absolute;
+	top: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	padding-left: 4px;
+	border-left: 1px solid var(--background-modifier-border);
+	font-size: 11px;
+	line-height: 20px;
+}
+
+.tg-tick {
+	position: absolute;
+	top: 0;
+	text-align: center;
+	font-weight: 400;
+	color: var(--text-muted);
+	font-size: 10px;
+	line-height: 20px;
+	border-left: 1px solid var(--background-modifier-border-hover);
+	overflow: hidden;
+}
+
+.tg-tick.tg-weekend {
+	background: var(--background-modifier-hover);
+}
+
+/* --- Group rows --- */
+
+.tg-group {
+	background: var(--background-secondary-alt);
+	font-weight: 600;
+}
+
+.tg-group .tg-meta {
+	background: var(--background-secondary-alt);
+	width: 600px;
+}
+
+.tg-group-name {
+	width: 100%;
+}
+
+/* --- Task rows --- */
+
+.tg-task:hover {
+	background: var(--background-modifier-hover);
+}
+
+.tg-task:hover .tg-meta {
+	background: var(--background-modifier-hover);
+}
+
+.tg-task-link {
+	cursor: pointer;
+	color: var(--text-normal);
+	text-decoration: none;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tg-task-link:hover {
+	color: var(--text-accent);
+	text-decoration: underline;
+}
+
+.tg-status-pill {
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: 10px;
+	text-transform: lowercase;
+	background: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+.tg-status-pill.tg-status-done {
+	background: rgba(var(--color-green-rgb), 0.2);
+	color: var(--color-green);
+}
+
+.tg-status-pill.tg-status-in-progress {
+	background: rgba(var(--color-blue-rgb), 0.2);
+	color: var(--color-blue);
+}
+
+.tg-status-pill.tg-status-cancelled {
+	background: rgba(var(--color-red-rgb), 0.15);
+	color: var(--text-muted);
+	text-decoration: line-through;
+}
+
+/* --- Timeline + bars --- */
+
+.tg-timeline {
+	position: relative;
+	flex: 0 0 auto;
+	height: 28px;
+}
+
+.tg-today {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	background: rgba(var(--color-red-rgb), 0.55);
+	z-index: 0;
+	pointer-events: none;
+}
+
+.tg-bar {
+	position: absolute;
+	top: 5px;
+	height: 18px;
+	border-radius: 4px;
+	background: var(--text-muted);
+	cursor: pointer;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	overflow: hidden;
+}
+
+.tg-bar:hover {
+	filter: brightness(1.15);
+}
+
+.tg-bar.tg-status-open,
+.tg-bar.tg-status-other {
+	background: var(--color-base-50, var(--text-faint));
+}
+
+.tg-bar.tg-status-in-progress {
+	background: var(--color-blue);
+}
+
+.tg-bar.tg-status-done {
+	background: var(--color-green);
+}
+
+.tg-bar.tg-status-cancelled {
+	background: var(--background-modifier-border);
+	opacity: 0.7;
+}
+
+.tg-bar.tg-bar-inferred {
+	opacity: 0.75;
+	border-right: 2px dashed var(--background-primary);
+}
+
+.tg-bar.tg-overdue {
+	box-shadow: 0 0 0 2px var(--color-red);
+}
+
+.tg-bar-label {
+	padding: 0 6px;
+	font-size: 10px;
+	color: white;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	mix-blend-mode: normal;
+}
