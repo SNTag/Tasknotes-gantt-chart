@@ -46,6 +46,7 @@ var DEFAULT_SETTINGS = {
   cancelledStatuses: "cancelled, canceled, dropped",
   defaultZoom: "week",
   groupByProject: true,
+  maxDepth: 3,
   showCompleted: true
 };
 function splitFieldList(value) {
@@ -115,6 +116,14 @@ var TasknotesGanttSettingTab = class extends import_obsidian.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
+    new import_obsidian.Setting(containerEl).setName("Sub-project depth").setDesc(
+      "When the chart is scoped to a parent note, how many levels of sub-projects to follow."
+    ).addSlider(
+      (slider) => slider.setLimits(1, 6, 1).setDynamicTooltip().setValue(this.plugin.settings.maxDepth).onChange(async (value) => {
+        this.plugin.settings.maxDepth = value;
+        await this.plugin.saveSettings();
+      })
+    );
     new import_obsidian.Setting(containerEl).setName("Group by project").setDesc("Group rows under their first linked project.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.groupByProject).onChange(async (value) => {
         this.plugin.settings.groupByProject = value;
@@ -165,6 +174,12 @@ function asArray(value) {
   if (value == null) return [];
   if (Array.isArray(value)) return value.map((v) => String(v));
   return [String(value)];
+}
+function extractLinkPath(raw) {
+  const name = raw.trim().replace(/^"+|"+$/g, "");
+  const link = name.match(/^\[\[(.+?)\]\]$/);
+  if (!link) return null;
+  return link[1].split("|")[0].split("#")[0].trim();
 }
 function projectDisplayName(raw) {
   let name = raw.trim().replace(/^"+|"+$/g, "");
@@ -243,6 +258,84 @@ function taskFromFile(app, file, settings, requireTag) {
     endInferred
   };
 }
+function buildProjectChildrenIndex(app) {
+  var _a, _b, _c;
+  const childrenOf = /* @__PURE__ */ new Map();
+  for (const file of app.vault.getMarkdownFiles()) {
+    const fm = (_a = app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+    if (!fm) continue;
+    for (const raw of asArray((_b = fm["projects"]) != null ? _b : fm["project"])) {
+      const linkpath = extractLinkPath(raw);
+      if (!linkpath) continue;
+      const dest = app.metadataCache.getFirstLinkpathDest(linkpath, file.path);
+      if (!dest) continue;
+      const list = (_c = childrenOf.get(dest.path)) != null ? _c : [];
+      list.push(file);
+      childrenOf.set(dest.path, list);
+    }
+  }
+  return childrenOf;
+}
+function collectProjectParents(app) {
+  const index = buildProjectChildrenIndex(app);
+  const parents = [];
+  for (const path of index.keys()) {
+    const file = app.vault.getAbstractFileByPath(path);
+    if (file && "basename" in file) parents.push(file);
+  }
+  parents.sort((a, b) => a.path.localeCompare(b.path));
+  return parents;
+}
+function collectProjectTree(app, settings, parent, maxDepth) {
+  const childrenOf = buildProjectChildrenIndex(app);
+  const groups = [];
+  const expanded = /* @__PURE__ */ new Set();
+  const emitted = /* @__PURE__ */ new Set();
+  const groupName = (file) => {
+    var _a, _b;
+    const fm = (_a = app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+    return String((_b = fm == null ? void 0 : fm["title"]) != null ? _b : file.basename);
+  };
+  const walk = (file, depth) => {
+    var _a, _b;
+    if (expanded.has(file.path)) return;
+    expanded.add(file.path);
+    const tasks = [];
+    const subProjects = [];
+    for (const child of (_a = childrenOf.get(file.path)) != null ? _a : []) {
+      const task = taskFromFile(app, child, settings, true);
+      if (task && !emitted.has(child.path)) {
+        tasks.push(task);
+        emitted.add(child.path);
+      }
+      const hasChildren = ((_b = childrenOf.get(child.path)) != null ? _b : []).length > 0;
+      if (hasChildren && depth < maxDepth && !expanded.has(child.path)) {
+        subProjects.push(child);
+      }
+    }
+    tasks.sort((a, b) => a.start.getTime() - b.start.getTime() || a.title.localeCompare(b.title));
+    groups.push({ name: groupName(file), depth, file, tasks });
+    for (const sub of subProjects) walk(sub, depth + 1);
+  };
+  walk(parent, 0);
+  return pruneEmptyGroups(groups);
+}
+function pruneEmptyGroups(groups) {
+  const keep = new Array(groups.length).fill(false);
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i].tasks.length > 0) {
+      keep[i] = true;
+      continue;
+    }
+    for (let j = i + 1; j < groups.length && groups[j].depth > groups[i].depth; j++) {
+      if (keep[j]) {
+        keep[i] = true;
+        break;
+      }
+    }
+  }
+  return groups.filter((_, i) => keep[i]);
+}
 
 // src/render.ts
 var NO_PROJECT = "(no project)";
@@ -295,13 +388,14 @@ function renderGantt(app, containerEl, allTasks, opts) {
   });
 }
 function renderGroupedGantt(app, containerEl, groups, opts) {
+  var _a, _b;
   containerEl.empty();
   containerEl.addClass("tg-container");
   const tasks = groups.flatMap((g) => g.tasks);
   if (tasks.length === 0) {
     containerEl.createDiv({
       cls: "tg-empty",
-      text: "No tasks with usable dates found. Check the filters and the frontmatter field names in the TaskNotes Gantt settings."
+      text: (_a = opts.emptyText) != null ? _a : "No tasks with usable dates found. Check the filters and the frontmatter field names in the TaskNotes Gantt settings."
     });
     return;
   }
@@ -336,10 +430,19 @@ function renderGroupedGantt(app, containerEl, groups, opts) {
       const groupRow = table.createDiv({ cls: "tg-row tg-group" });
       const groupMeta = groupRow.createDiv({ cls: "tg-meta" });
       groupMeta.style.width = `${metaWidth}px`;
-      groupMeta.createDiv({
-        cls: "tg-cell tg-group-name",
-        text: `${group.name} (${group.tasks.length})`
-      });
+      const nameCell = groupMeta.createDiv({ cls: "tg-cell tg-group-name" });
+      nameCell.style.paddingLeft = `${8 + ((_b = group.depth) != null ? _b : 0) * 20}px`;
+      const label = `${group.name} (${group.tasks.length})`;
+      if (group.file) {
+        const path = group.file.path;
+        const link = nameCell.createEl("a", { cls: "tg-task-link", text: label });
+        link.addEventListener("click", (evt) => {
+          evt.preventDefault();
+          app.workspace.openLinkText(path, "", evt.ctrlKey || evt.metaKey);
+        });
+      } else {
+        nameCell.setText(label);
+      }
       groupRow.createDiv({ cls: "tg-timeline" }).style.width = `${timelineWidth}px`;
     }
     for (const task of group.tasks) {
@@ -434,11 +537,14 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.chartEl = null;
+    this.parentChipEl = null;
     this.filterText = "";
+    this.parentFile = null;
     this.plugin = plugin;
     this.zoom = plugin.settings.defaultZoom;
     this.groupByProject = plugin.settings.groupByProject;
     this.showCompleted = plugin.settings.showCompleted;
+    this.maxDepth = plugin.settings.maxDepth;
   }
   getViewType() {
     return VIEW_TYPE_TASKNOTES_GANTT;
@@ -462,7 +568,31 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
     this.registerEvent(this.app.vault.on("delete", delayedRefresh));
     this.registerEvent(this.app.vault.on("rename", delayedRefresh));
   }
+  /** Scope the chart to one parent project note (null shows all tasks). */
+  setParent(file) {
+    this.parentFile = file;
+    this.updateParentChip();
+    this.refresh();
+  }
   buildToolbar(bar) {
+    const parentBtn = bar.createEl("button", { text: "Parent note\u2026", cls: "tg-parent-btn" });
+    parentBtn.addEventListener("click", () => {
+      new ParentNoteModal(this.app, (file) => this.setParent(file)).open();
+    });
+    this.parentChipEl = bar.createDiv({ cls: "tg-parent-chip" });
+    this.updateParentChip();
+    const depthSelect = bar.createEl("select", {
+      cls: "dropdown tg-depth",
+      attr: { "aria-label": "Sub-project depth" }
+    });
+    for (let depth = 1; depth <= 6; depth++) {
+      depthSelect.createEl("option", { text: `Depth ${depth}`, attr: { value: String(depth) } });
+    }
+    depthSelect.value = String(Math.min(Math.max(this.maxDepth, 1), 6));
+    depthSelect.addEventListener("change", () => {
+      this.maxDepth = Number(depthSelect.value);
+      this.refresh();
+    });
     const filter = bar.createEl("input", {
       cls: "tg-filter",
       attr: { type: "search", placeholder: "Filter tasks\u2026" }
@@ -496,6 +626,19 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
     const refreshBtn = bar.createEl("button", { text: "Refresh", cls: "tg-refresh" });
     refreshBtn.addEventListener("click", () => this.refresh());
   }
+  updateParentChip() {
+    const chip = this.parentChipEl;
+    if (!chip) return;
+    chip.empty();
+    if (!this.parentFile) {
+      chip.createSpan({ cls: "tg-parent-none", text: "All tasks" });
+      return;
+    }
+    chip.createSpan({ cls: "tg-parent-name", text: this.parentFile.basename });
+    const clear = chip.createSpan({ cls: "tg-parent-clear", text: "\u2715" });
+    clear.setAttr("aria-label", "Clear parent note");
+    clear.addEventListener("click", () => this.setParent(null));
+  }
   makeToggle(parent, label, initial, onChange) {
     const wrapper = parent.createEl("label", { cls: "tg-toggle" });
     const box = wrapper.createEl("input", { attr: { type: "checkbox" } });
@@ -504,8 +647,32 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
     wrapper.createSpan({ text: label });
     return wrapper;
   }
+  matchesFilters(task) {
+    if (!this.showCompleted && (task.statusKind === "done" || task.statusKind === "cancelled")) {
+      return false;
+    }
+    if (this.filterText) {
+      const needle = this.filterText.toLowerCase();
+      return task.title.toLowerCase().includes(needle) || task.status.toLowerCase().includes(needle) || task.projects.some((p) => p.toLowerCase().includes(needle));
+    }
+    return true;
+  }
   refresh() {
     if (!this.chartEl) return;
+    if (this.parentFile) {
+      const groups = collectProjectTree(
+        this.app,
+        this.plugin.settings,
+        this.parentFile,
+        this.maxDepth
+      ).map((group) => ({ ...group, tasks: group.tasks.filter((t) => this.matchesFilters(t)) }));
+      renderGroupedGantt(this.app, this.chartEl, pruneEmptyGroups(groups), {
+        pxPerDay: ZOOM_PX_PER_DAY[this.zoom],
+        columns: DEFAULT_COLUMNS,
+        emptyText: `No tasks found under "${this.parentFile.basename}". Tasks belong to a project when their 'projects' frontmatter links to it (directly or through a sub-project within the depth limit).`
+      });
+      return;
+    }
     const tasks = collectTasks(this.app, this.plugin.settings);
     renderGantt(this.app, this.chartEl, tasks, {
       zoom: this.zoom,
@@ -516,6 +683,25 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
   }
   async onClose() {
     this.chartEl = null;
+    this.parentChipEl = null;
+  }
+};
+var ParentNoteModal = class extends import_obsidian2.FuzzySuggestModal {
+  constructor(app, onChoose) {
+    super(app);
+    this.onChoose = onChoose;
+    this.items = collectProjectParents(app);
+    if (this.items.length === 0) this.items = app.vault.getMarkdownFiles();
+    this.setPlaceholder("Choose a parent project note\u2026");
+  }
+  getItems() {
+    return this.items;
+  }
+  getItemText(file) {
+    return file.path;
+  }
+  onChooseItem(file) {
+    this.onChoose(file);
   }
 };
 
@@ -621,6 +807,15 @@ var TasknotesGanttPlugin = class extends import_obsidian4.Plugin {
       name: "Open Gantt chart",
       callback: () => void this.activateView()
     });
+    this.addCommand({
+      id: "open-gantt-for-current-note",
+      name: "Open Gantt chart for current note (as parent project)",
+      callback: async () => {
+        const file = this.app.workspace.getActiveFile();
+        const view = await this.activateView();
+        if (view && file) view.setParent(file);
+      }
+    });
     this.addSettingTab(new TasknotesGanttSettingTab(this.app, this));
   }
   async activateView() {
@@ -632,7 +827,9 @@ var TasknotesGanttPlugin = class extends import_obsidian4.Plugin {
       leaf = this.app.workspace.getLeaf("tab");
       await leaf.setViewState({ type: VIEW_TYPE_TASKNOTES_GANTT, active: true });
     }
-    if (leaf) this.app.workspace.revealLeaf(leaf);
+    if (!leaf) return null;
+    this.app.workspace.revealLeaf(leaf);
+    return leaf.view instanceof TasknotesGanttView ? leaf.view : null;
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());

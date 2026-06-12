@@ -31,6 +31,17 @@ For each task it determines:
 | **Group** | first entry in `projects` (wikilinks are resolved to a display name) |
 | **Color** | `status` — open (gray), in-progress (blue), done (green), cancelled (faded); overdue tasks get a red outline |
 
+## Scoping to a parent project (recursive)
+
+You can point the chart at one parent note (e.g. `Example Project Overview`) and it will chart that project's whole subtree:
+
+- Click **Parent note…** in the Gantt view toolbar and pick the note (the picker lists every note that is referenced as a project), or open the parent note and run the command **"Open Gantt chart for current note (as parent project)"**.
+- The chart then walks the hierarchy recursively: tasks whose `projects` frontmatter links to the parent, sub-project notes that link to it, those sub-projects' tasks, and so on — down to the **Depth** selected in the toolbar (1–6, default in settings).
+- Each project becomes an indented, clickable section header; tasks appear under the nearest project that links them. Projects with no tasks anywhere in their subtree are hidden. Cycles and duplicates are handled (a task is only listed once).
+- Click ✕ on the parent chip to go back to charting all tasks.
+
+Note that membership follows the TaskNotes model: a note is a child of a project when its **`projects` frontmatter** links to it. Plain `[[wikilinks]]` in a note's body do not create hierarchy edges.
+
 ## Using it as a Bases layout (database view)
 
 On Obsidian 1.10+ the plugin registers a **"TaskNotes Gantt"** layout for [Bases](https://help.obsidian.md/bases), so it appears in the same Layout dropdown as Table, Cards, and the TaskNotes layouts:

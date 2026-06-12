@@ -1,4 +1,4 @@
-import type { App } from "obsidian";
+import type { App, TFile } from "obsidian";
 import { ZoomLevel, ZOOM_PX_PER_DAY } from "./settings";
 import { GanttTask, addDays, daysBetween, startOfDay } from "./tasks";
 
@@ -20,11 +20,16 @@ export interface Column {
 export interface GanttGroup {
 	name: string;
 	tasks: GanttTask[];
+	/** Nesting level for hierarchical (parent project) views. */
+	depth?: number;
+	/** Note backing this group; renders the header as a link when set. */
+	file?: TFile;
 }
 
 export interface ChartOptions {
 	pxPerDay: number;
 	columns: Column[];
+	emptyText?: string;
 }
 
 const NO_PROJECT = "(no project)";
@@ -107,7 +112,9 @@ export function renderGroupedGantt(
 	if (tasks.length === 0) {
 		containerEl.createDiv({
 			cls: "tg-empty",
-			text: "No tasks with usable dates found. Check the filters and the frontmatter field names in the TaskNotes Gantt settings.",
+			text:
+				opts.emptyText ??
+				"No tasks with usable dates found. Check the filters and the frontmatter field names in the TaskNotes Gantt settings.",
 		});
 		return;
 	}
@@ -148,10 +155,19 @@ export function renderGroupedGantt(
 			const groupRow = table.createDiv({ cls: "tg-row tg-group" });
 			const groupMeta = groupRow.createDiv({ cls: "tg-meta" });
 			groupMeta.style.width = `${metaWidth}px`;
-			groupMeta.createDiv({
-				cls: "tg-cell tg-group-name",
-				text: `${group.name} (${group.tasks.length})`,
-			});
+			const nameCell = groupMeta.createDiv({ cls: "tg-cell tg-group-name" });
+			nameCell.style.paddingLeft = `${8 + (group.depth ?? 0) * 20}px`;
+			const label = `${group.name} (${group.tasks.length})`;
+			if (group.file) {
+				const path = group.file.path;
+				const link = nameCell.createEl("a", { cls: "tg-task-link", text: label });
+				link.addEventListener("click", (evt) => {
+					evt.preventDefault();
+					app.workspace.openLinkText(path, "", evt.ctrlKey || evt.metaKey);
+				});
+			} else {
+				nameCell.setText(label);
+			}
 			groupRow.createDiv({ cls: "tg-timeline" }).style.width = `${timelineWidth}px`;
 		}
 		for (const task of group.tasks) {

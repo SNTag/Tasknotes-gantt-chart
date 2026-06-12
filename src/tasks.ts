@@ -55,6 +55,14 @@ function asArray(value: unknown): string[] {
 	return [String(value)];
 }
 
+/** Extract the link target from '[[path]]' / '[[path|Alias]]'. Null for plain text. */
+export function extractLinkPath(raw: string): string | null {
+	const name = raw.trim().replace(/^"+|"+$/g, "");
+	const link = name.match(/^\[\[(.+?)\]\]$/);
+	if (!link) return null;
+	return link[1].split("|")[0].split("#")[0].trim();
+}
+
 /** Turn '[[Notes/Foo/Bar Overview]]' or '[[path|Alias]]' into a display name. */
 export function projectDisplayName(raw: string): string {
 	let name = raw.trim().replace(/^"+|"+$/g, "");
@@ -149,4 +157,111 @@ export function taskFromFile(
 		end,
 		endInferred,
 	};
+}
+
+export interface ProjectGroup {
+	name: string;
+	depth: number;
+	file?: TFile;
+	tasks: GanttTask[];
+}
+
+/**
+ * Map of note path -> notes whose `projects` frontmatter links to it.
+ * These edges define the project hierarchy walked by collectProjectTree.
+ */
+export function buildProjectChildrenIndex(app: App): Map<string, TFile[]> {
+	const childrenOf = new Map<string, TFile[]>();
+	for (const file of app.vault.getMarkdownFiles()) {
+		const fm = app.metadataCache.getFileCache(file)?.frontmatter;
+		if (!fm) continue;
+		for (const raw of asArray(fm["projects"] ?? fm["project"])) {
+			const linkpath = extractLinkPath(raw);
+			if (!linkpath) continue;
+			const dest = app.metadataCache.getFirstLinkpathDest(linkpath, file.path);
+			if (!dest) continue;
+			const list = childrenOf.get(dest.path) ?? [];
+			list.push(file);
+			childrenOf.set(dest.path, list);
+		}
+	}
+	return childrenOf;
+}
+
+/** Notes that are used as a project by at least one other note. */
+export function collectProjectParents(app: App): TFile[] {
+	const index = buildProjectChildrenIndex(app);
+	const parents: TFile[] = [];
+	for (const path of index.keys()) {
+		const file = app.vault.getAbstractFileByPath(path);
+		if (file && "basename" in file) parents.push(file as TFile);
+	}
+	parents.sort((a, b) => a.path.localeCompare(b.path));
+	return parents;
+}
+
+/**
+ * Walk the project hierarchy starting at `parent`, collecting every note that
+ * points to it (directly or through sub-projects) via the `projects` field.
+ * Returns one group per project in depth-first order; tasks appear under the
+ * nearest project that links them.
+ */
+export function collectProjectTree(
+	app: App,
+	settings: TasknotesGanttSettings,
+	parent: TFile,
+	maxDepth: number
+): ProjectGroup[] {
+	const childrenOf = buildProjectChildrenIndex(app);
+	const groups: ProjectGroup[] = [];
+	const expanded = new Set<string>();
+	const emitted = new Set<string>();
+
+	const groupName = (file: TFile): string => {
+		const fm = app.metadataCache.getFileCache(file)?.frontmatter;
+		return String(fm?.["title"] ?? file.basename);
+	};
+
+	const walk = (file: TFile, depth: number): void => {
+		if (expanded.has(file.path)) return;
+		expanded.add(file.path);
+
+		const tasks: GanttTask[] = [];
+		const subProjects: TFile[] = [];
+		for (const child of childrenOf.get(file.path) ?? []) {
+			const task = taskFromFile(app, child, settings, true);
+			if (task && !emitted.has(child.path)) {
+				tasks.push(task);
+				emitted.add(child.path);
+			}
+			const hasChildren = (childrenOf.get(child.path) ?? []).length > 0;
+			if (hasChildren && depth < maxDepth && !expanded.has(child.path)) {
+				subProjects.push(child);
+			}
+		}
+		tasks.sort((a, b) => a.start.getTime() - b.start.getTime() || a.title.localeCompare(b.title));
+		groups.push({ name: groupName(file), depth, file, tasks });
+		for (const sub of subProjects) walk(sub, depth + 1);
+	};
+
+	walk(parent, 0);
+	return pruneEmptyGroups(groups);
+}
+
+/** Drop projects that contain no tasks anywhere in their subtree. */
+export function pruneEmptyGroups(groups: ProjectGroup[]): ProjectGroup[] {
+	const keep = new Array(groups.length).fill(false);
+	for (let i = groups.length - 1; i >= 0; i--) {
+		if (groups[i].tasks.length > 0) {
+			keep[i] = true;
+			continue;
+		}
+		for (let j = i + 1; j < groups.length && groups[j].depth > groups[i].depth; j++) {
+			if (keep[j]) {
+				keep[i] = true;
+				break;
+			}
+		}
+	}
+	return groups.filter((_, i) => keep[i]);
 }

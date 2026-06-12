@@ -33,10 +33,20 @@ export default class TasknotesGanttPlugin extends Plugin {
 			callback: () => void this.activateView(),
 		});
 
+		this.addCommand({
+			id: "open-gantt-for-current-note",
+			name: "Open Gantt chart for current note (as parent project)",
+			callback: async () => {
+				const file = this.app.workspace.getActiveFile();
+				const view = await this.activateView();
+				if (view && file) view.setParent(file);
+			},
+		});
+
 		this.addSettingTab(new TasknotesGanttSettingTab(this.app, this));
 	}
 
-	async activateView(): Promise<void> {
+	async activateView(): Promise<TasknotesGanttView | null> {
 		const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_TASKNOTES_GANTT);
 		let leaf: WorkspaceLeaf | null;
 		if (existing.length > 0) {
@@ -45,7 +55,9 @@ export default class TasknotesGanttPlugin extends Plugin {
 			leaf = this.app.workspace.getLeaf("tab");
 			await leaf.setViewState({ type: VIEW_TYPE_TASKNOTES_GANTT, active: true });
 		}
-		if (leaf) this.app.workspace.revealLeaf(leaf);
+		if (!leaf) return null;
+		this.app.workspace.revealLeaf(leaf);
+		return leaf.view instanceof TasknotesGanttView ? leaf.view : null;
 	}
 
 	async loadSettings(): Promise<void> {

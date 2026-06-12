@@ -117,6 +117,22 @@ export class TasknotesGanttSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName("Sub-project depth")
+			.setDesc(
+				"When the chart is scoped to a parent note, how many levels of sub-projects to follow."
+			)
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 6, 1)
+					.setDynamicTooltip()
+					.setValue(this.plugin.settings.maxDepth)
+					.onChange(async (value) => {
+						this.plugin.settings.maxDepth = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
 			.setName("Group by project")
 			.setDesc("Group rows under their first linked project.")
 			.addToggle((toggle) =>

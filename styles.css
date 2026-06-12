@@ -23,6 +23,38 @@
 	width: 180px;
 }
 
+.tg-parent-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 10px;
+	border-radius: 12px;
+	background: var(--background-modifier-hover);
+	font-size: var(--font-ui-small);
+	max-width: 260px;
+}
+
+.tg-parent-none {
+	color: var(--text-muted);
+}
+
+.tg-parent-name {
+	color: var(--text-accent);
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tg-parent-clear {
+	cursor: pointer;
+	color: var(--text-muted);
+}
+
+.tg-parent-clear:hover {
+	color: var(--text-normal);
+}
+
 .tg-toggle {
 	display: inline-flex;
 	align-items: center;

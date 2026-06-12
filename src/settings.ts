@@ -19,6 +19,8 @@ export interface TasknotesGanttSettings {
 	defaultZoom: ZoomLevel;
 	/** Group rows by their first project link. */
 	groupByProject: boolean;
+	/** How many levels of sub-projects to follow below a parent note. */
+	maxDepth: number;
 	/** Include tasks whose status is done/cancelled. */
 	showCompleted: boolean;
 }
@@ -42,6 +44,7 @@ export const DEFAULT_SETTINGS: TasknotesGanttSettings = {
 	cancelledStatuses: "cancelled, canceled, dropped",
 	defaultZoom: "week",
 	groupByProject: true,
+	maxDepth: 3,
 	showCompleted: true,
 };
 
