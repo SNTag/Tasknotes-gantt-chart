@@ -28,7 +28,7 @@ For each task it determines:
 | --- | --- |
 | **Start** | `scheduled`, `start`, `startDate` → falls back to `date created` / `dateCreated` |
 | **End** | `due`, `end`, `endDate`, `deadline` → for done tasks falls back to `completedDate` / `date modified`; for open tasks the bar runs to **today** (drawn with a dashed edge to show the end is inferred) |
-| **Group** | first entry in `projects` (wikilinks are resolved to a display name) |
+| **Group** | first entry in `projects` (wikilinks are resolved to a display name, e.g. `Example Project Overview`) |
 | **Color** | `status` — open (gray), in-progress (blue), done (green), cancelled (faded); overdue tasks get a red outline |
 
 ## Scoping to a parent project (recursive)
@@ -74,7 +74,7 @@ Dates for the bars are still resolved from frontmatter using the field mappings 
 
 ### Installation via BRAT
 
-If you use the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin, add this repository (`example-user/Tasknotes-gantt-chart`) as a beta plugin. (Requires a published release — see below.)
+If you use the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin, add this repository (`<github-username>/Tasknotes-gantt-chart`) as a beta plugin. (Requires a published release — see below.)
 
 ## Building from source
 
