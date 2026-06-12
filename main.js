@@ -338,6 +338,27 @@ function pruneEmptyGroups(groups) {
 }
 
 // src/render.ts
+var GROUP_PALETTE = [
+  "var(--color-blue)",
+  "var(--color-orange)",
+  "var(--color-purple)",
+  "var(--color-cyan)",
+  "var(--color-pink)",
+  "var(--color-yellow)",
+  "var(--color-green)",
+  "var(--color-red)"
+];
+function assignSubprojectColors(groups) {
+  var _a;
+  let next = 0;
+  let current;
+  for (const group of groups) {
+    const depth = (_a = group.depth) != null ? _a : 0;
+    if (depth === 0) current = void 0;
+    else if (depth === 1) current = GROUP_PALETTE[next++ % GROUP_PALETTE.length];
+    group.color = current;
+  }
+}
 var NO_PROJECT = "(no project)";
 var DEFAULT_COLUMNS = [
   { label: "Task", width: 220, kind: "title", value: (t) => t.title },
@@ -432,6 +453,10 @@ function renderGroupedGantt(app, containerEl, groups, opts) {
       groupMeta.style.width = `${metaWidth}px`;
       const nameCell = groupMeta.createDiv({ cls: "tg-cell tg-group-name" });
       nameCell.style.paddingLeft = `${8 + ((_b = group.depth) != null ? _b : 0) * 20}px`;
+      if (group.color) {
+        const dot = nameCell.createSpan({ cls: "tg-group-dot" });
+        dot.style.background = group.color;
+      }
       const label = `${group.name} (${group.tasks.length})`;
       if (group.file) {
         const path = group.file.path;
@@ -446,7 +471,17 @@ function renderGroupedGantt(app, containerEl, groups, opts) {
       groupRow.createDiv({ cls: "tg-timeline" }).style.width = `${timelineWidth}px`;
     }
     for (const task of group.tasks) {
-      renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth);
+      renderTaskRow(
+        app,
+        table,
+        task,
+        columns,
+        rangeStart,
+        today,
+        pxPerDay,
+        timelineWidth,
+        group.color
+      );
     }
   }
 }
@@ -482,7 +517,7 @@ function renderTimeScale(el, rangeStart, totalDays, pxPerDay) {
     }
   }
 }
-function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth) {
+function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth, barColor) {
   var _a;
   const row = table.createDiv({ cls: "tg-row tg-task" });
   const meta = row.createDiv({ cls: "tg-meta" });
@@ -516,6 +551,10 @@ function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, t
   });
   bar.style.left = `${left}px`;
   bar.style.width = `${width}px`;
+  if (barColor) {
+    bar.addClass("tg-bar-colored");
+    bar.style.background = barColor;
+  }
   bar.setAttr(
     "aria-label",
     `${task.title}
@@ -666,7 +705,9 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
         this.parentFile,
         this.maxDepth
       ).map((group) => ({ ...group, tasks: group.tasks.filter((t) => this.matchesFilters(t)) }));
-      renderGroupedGantt(this.app, this.chartEl, pruneEmptyGroups(groups), {
+      const pruned = pruneEmptyGroups(groups);
+      assignSubprojectColors(pruned);
+      renderGroupedGantt(this.app, this.chartEl, pruned, {
         pxPerDay: ZOOM_PX_PER_DAY[this.zoom],
         columns: DEFAULT_COLUMNS,
         emptyText: `No tasks found under "${this.parentFile.basename}". Tasks belong to a project when their 'projects' frontmatter links to it (directly or through a sub-project within the depth limit).`

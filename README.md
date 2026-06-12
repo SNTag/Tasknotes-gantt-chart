@@ -37,7 +37,7 @@ You can point the chart at one parent note (e.g. `Example Project Overview`) and
 
 - Click **Parent note…** in the Gantt view toolbar and pick the note (the picker lists every note that is referenced as a project), or open the parent note and run the command **"Open Gantt chart for current note (as parent project)"**.
 - The chart then walks the hierarchy recursively: tasks whose `projects` frontmatter links to the parent, sub-project notes that link to it, those sub-projects' tasks, and so on — down to the **Depth** selected in the toolbar (1–6, default in settings).
-- Each project becomes an indented, clickable section header; tasks appear under the nearest project that links them. Projects with no tasks anywhere in their subtree are hidden. Cycles and duplicates are handled (a task is only listed once).
+- Each project becomes an indented, clickable section header; tasks appear under the nearest project that links them. Every first-level sub-project gets a distinct color (header dot + task bars, inherited by its deeper sub-projects), while the parent's own tasks keep status-based colors. Projects with no tasks anywhere in their subtree are hidden. Cycles and duplicates are handled (a task is only listed once).
 - Click ✕ on the parent chip to go back to charting all tasks.
 
 Note that membership follows the TaskNotes model: a note is a child of a project when its **`projects` frontmatter** links to it. Plain `[[wikilinks]]` in a note's body do not create hierarchy edges.

@@ -3,7 +3,7 @@ import type { App } from "obsidian";
 import type TasknotesGanttPlugin from "./main";
 import { ZOOM_PX_PER_DAY, ZoomLevel } from "./settings";
 import { GanttTask, collectProjectParents, collectProjectTree, collectTasks, pruneEmptyGroups } from "./tasks";
-import { DEFAULT_COLUMNS, renderGantt, renderGroupedGantt } from "./render";
+import { DEFAULT_COLUMNS, assignSubprojectColors, renderGantt, renderGroupedGantt } from "./render";
 
 export const VIEW_TYPE_TASKNOTES_GANTT = "tasknotes-gantt-view";
 
@@ -177,7 +177,9 @@ export class TasknotesGanttView extends ItemView {
 				this.parentFile,
 				this.maxDepth
 			).map((group) => ({ ...group, tasks: group.tasks.filter((t) => this.matchesFilters(t)) }));
-			renderGroupedGantt(this.app, this.chartEl, pruneEmptyGroups(groups), {
+			const pruned = pruneEmptyGroups(groups);
+			assignSubprojectColors(pruned);
+			renderGroupedGantt(this.app, this.chartEl, pruned, {
 				pxPerDay: ZOOM_PX_PER_DAY[this.zoom],
 				columns: DEFAULT_COLUMNS,
 				emptyText: `No tasks found under "${this.parentFile.basename}". Tasks belong to a project when their 'projects' frontmatter links to it (directly or through a sub-project within the depth limit).`,

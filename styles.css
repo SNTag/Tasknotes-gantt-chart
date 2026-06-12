@@ -208,6 +208,15 @@
 	width: 100%;
 }
 
+.tg-group-dot {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	margin-right: 7px;
+	flex: 0 0 auto;
+}
+
 /* --- Task rows --- */
 
 .tg-task:hover {
@@ -307,6 +316,12 @@
 .tg-bar.tg-status-cancelled {
 	background: var(--background-modifier-border);
 	opacity: 0.7;
+}
+
+/* Project-colored bars: status is still shown by the pill; done/cancelled dim. */
+.tg-bar.tg-bar-colored.tg-status-done,
+.tg-bar.tg-bar-colored.tg-status-cancelled {
+	opacity: 0.5;
 }
 
 .tg-bar.tg-bar-inferred {

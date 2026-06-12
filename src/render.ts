@@ -24,6 +24,35 @@ export interface GanttGroup {
 	depth?: number;
 	/** Note backing this group; renders the header as a link when set. */
 	file?: TFile;
+	/** CSS color applied to this group's bars and header dot. */
+	color?: string;
+}
+
+const GROUP_PALETTE = [
+	"var(--color-blue)",
+	"var(--color-orange)",
+	"var(--color-purple)",
+	"var(--color-cyan)",
+	"var(--color-pink)",
+	"var(--color-yellow)",
+	"var(--color-green)",
+	"var(--color-red)",
+];
+
+/**
+ * Give each first-level sub-project (depth 1) a distinct palette color,
+ * inherited by its deeper sub-projects. Depth-0 (the parent itself) keeps
+ * the default status-based bar colors.
+ */
+export function assignSubprojectColors(groups: GanttGroup[]): void {
+	let next = 0;
+	let current: string | undefined;
+	for (const group of groups) {
+		const depth = group.depth ?? 0;
+		if (depth === 0) current = undefined;
+		else if (depth === 1) current = GROUP_PALETTE[next++ % GROUP_PALETTE.length];
+		group.color = current;
+	}
 }
 
 export interface ChartOptions {
@@ -157,6 +186,10 @@ export function renderGroupedGantt(
 			groupMeta.style.width = `${metaWidth}px`;
 			const nameCell = groupMeta.createDiv({ cls: "tg-cell tg-group-name" });
 			nameCell.style.paddingLeft = `${8 + (group.depth ?? 0) * 20}px`;
+			if (group.color) {
+				const dot = nameCell.createSpan({ cls: "tg-group-dot" });
+				dot.style.background = group.color;
+			}
 			const label = `${group.name} (${group.tasks.length})`;
 			if (group.file) {
 				const path = group.file.path;
@@ -171,7 +204,17 @@ export function renderGroupedGantt(
 			groupRow.createDiv({ cls: "tg-timeline" }).style.width = `${timelineWidth}px`;
 		}
 		for (const task of group.tasks) {
-			renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth);
+			renderTaskRow(
+				app,
+				table,
+				task,
+				columns,
+				rangeStart,
+				today,
+				pxPerDay,
+				timelineWidth,
+				group.color
+			);
 		}
 	}
 }
@@ -225,7 +268,8 @@ function renderTaskRow(
 	rangeStart: Date,
 	today: Date,
 	pxPerDay: number,
-	timelineWidth: number
+	timelineWidth: number,
+	barColor?: string
 ): void {
 	const row = table.createDiv({ cls: "tg-row tg-task" });
 
@@ -269,6 +313,10 @@ function renderTaskRow(
 	});
 	bar.style.left = `${left}px`;
 	bar.style.width = `${width}px`;
+	if (barColor) {
+		bar.addClass("tg-bar-colored");
+		bar.style.background = barColor;
+	}
 	bar.setAttr(
 		"aria-label",
 		`${task.title}\n${formatDate(task.start)} → ${formatDate(task.end)}${
