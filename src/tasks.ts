@@ -86,52 +86,67 @@ function hasTaskTag(fm: Record<string, unknown>, taskTag: string): boolean {
 }
 
 export function collectTasks(app: App, settings: TasknotesGanttSettings): GanttTask[] {
-	const startFields = splitFieldList(settings.startFields);
-	const endFields = splitFieldList(settings.endFields);
-	const createdFields = splitFieldList(settings.createdFields);
-	const completedFields = splitFieldList(settings.completedFields);
 	const folder = settings.taskFolder.replace(/^\/+|\/+$/g, "");
-	const today = startOfDay(new Date());
 
 	const tasks: GanttTask[] = [];
 	for (const file of app.vault.getMarkdownFiles()) {
 		if (folder && !(file.path === folder || file.path.startsWith(folder + "/"))) continue;
-		const fm = app.metadataCache.getFileCache(file)?.frontmatter;
-		if (!fm) continue;
-		if (!hasTaskTag(fm, settings.taskTag)) continue;
-
-		const status = String(fm["status"] ?? "");
-		const statusKind = classifyStatus(status, settings);
-
-		let start = parseDate(firstField(fm, startFields));
-		let end = parseDate(firstField(fm, endFields));
-		let endInferred = false;
-		if (!start) start = parseDate(firstField(fm, createdFields));
-		if (!end) {
-			endInferred = true;
-			if (statusKind === "done" || statusKind === "cancelled") {
-				end = parseDate(firstField(fm, completedFields)) ?? start;
-			} else {
-				end = today;
-			}
-		}
-		if (!start && end) start = end;
-		if (!start || !end) continue;
-		if (end < start) end = start;
-
-		tasks.push({
-			file,
-			title: String(fm["title"] ?? file.basename),
-			status,
-			statusKind,
-			priority: String(fm["priority"] ?? "").replace(/^"+|"+$/g, ""),
-			projects: asArray(fm["projects"] ?? fm["project"]).map(projectDisplayName),
-			start,
-			end,
-			endInferred,
-		});
+		const task = taskFromFile(app, file, settings, true);
+		if (task) tasks.push(task);
 	}
 
 	tasks.sort((a, b) => a.start.getTime() - b.start.getTime() || a.title.localeCompare(b.title));
 	return tasks;
+}
+
+/**
+ * Parse one note's frontmatter into a GanttTask. Returns null when the note
+ * is not a task (missing tag, when required) or has no usable dates.
+ */
+export function taskFromFile(
+	app: App,
+	file: TFile,
+	settings: TasknotesGanttSettings,
+	requireTag: boolean
+): GanttTask | null {
+	const startFields = splitFieldList(settings.startFields);
+	const endFields = splitFieldList(settings.endFields);
+	const createdFields = splitFieldList(settings.createdFields);
+	const completedFields = splitFieldList(settings.completedFields);
+	const today = startOfDay(new Date());
+
+	const fm = app.metadataCache.getFileCache(file)?.frontmatter;
+	if (!fm) return null;
+	if (requireTag && !hasTaskTag(fm, settings.taskTag)) return null;
+
+	const status = String(fm["status"] ?? "");
+	const statusKind = classifyStatus(status, settings);
+
+	let start = parseDate(firstField(fm, startFields));
+	let end = parseDate(firstField(fm, endFields));
+	let endInferred = false;
+	if (!start) start = parseDate(firstField(fm, createdFields));
+	if (!end) {
+		endInferred = true;
+		if (statusKind === "done" || statusKind === "cancelled") {
+			end = parseDate(firstField(fm, completedFields)) ?? start;
+		} else {
+			end = today;
+		}
+	}
+	if (!start && end) start = end;
+	if (!start || !end) return null;
+	if (end < start) end = start;
+
+	return {
+		file,
+		title: String(fm["title"] ?? file.basename),
+		status,
+		statusKind,
+		priority: String(fm["priority"] ?? "").replace(/^"+|"+$/g, ""),
+		projects: asArray(fm["projects"] ?? fm["project"]).map(projectDisplayName),
+		start,
+		end,
+		endInferred,
+	};
 }

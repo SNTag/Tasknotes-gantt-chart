@@ -2,6 +2,7 @@ import { Plugin, WorkspaceLeaf } from "obsidian";
 import { DEFAULT_SETTINGS, TasknotesGanttSettings } from "./settings";
 import { TasknotesGanttSettingTab } from "./settingsTab";
 import { TasknotesGanttView, VIEW_TYPE_TASKNOTES_GANTT } from "./view";
+import { GANTT_BASES_VIEW_ID, GanttBasesView, ganttBasesOptions } from "./basesView";
 
 export default class TasknotesGanttPlugin extends Plugin {
 	settings: TasknotesGanttSettings = DEFAULT_SETTINGS;
@@ -10,6 +11,17 @@ export default class TasknotesGanttPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.registerView(VIEW_TYPE_TASKNOTES_GANTT, (leaf) => new TasknotesGanttView(leaf, this));
+
+		// Bases layout, available on Obsidian 1.10+ (where the Bases API exists).
+		if (typeof this.registerBasesView === "function") {
+			this.registerBasesView(GANTT_BASES_VIEW_ID, {
+				name: "TaskNotes Gantt",
+				icon: "gantt-chart",
+				factory: (controller, containerEl) =>
+					new GanttBasesView(controller, containerEl, this),
+				options: () => ganttBasesOptions(),
+			});
+		}
 
 		this.addRibbonIcon("gantt-chart", "Open TaskNotes Gantt chart", () => {
 			void this.activateView();

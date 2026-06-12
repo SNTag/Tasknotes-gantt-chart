@@ -9,23 +9,35 @@ export interface RenderOptions {
 	filterText: string;
 }
 
-const NO_PROJECT = "(no project)";
-
-interface Column {
+export interface Column {
 	label: string;
-	cls: string;
+	width: number;
+	kind: "title" | "status" | "text";
+	cls?: string;
 	value: (t: GanttTask) => string;
 }
 
-const COLUMNS: Column[] = [
-	{ label: "Task", cls: "tg-col-title", value: (t) => t.title },
-	{ label: "Status", cls: "tg-col-status", value: (t) => t.status || "open" },
-	{ label: "Priority", cls: "tg-col-priority", value: (t) => t.priority },
-	{ label: "Start", cls: "tg-col-date", value: (t) => formatDate(t.start) },
-	{ label: "End", cls: "tg-col-date", value: (t) => formatDate(t.end) },
+export interface GanttGroup {
+	name: string;
+	tasks: GanttTask[];
+}
+
+export interface ChartOptions {
+	pxPerDay: number;
+	columns: Column[];
+}
+
+const NO_PROJECT = "(no project)";
+
+export const DEFAULT_COLUMNS: Column[] = [
+	{ label: "Task", width: 220, kind: "title", value: (t) => t.title },
+	{ label: "Status", width: 110, kind: "status", value: (t) => t.status || "open" },
+	{ label: "Priority", width: 80, kind: "text", value: (t) => t.priority },
+	{ label: "Start", width: 95, kind: "text", cls: "tg-col-date", value: (t) => formatDate(t.start) },
+	{ label: "End", width: 95, kind: "text", cls: "tg-col-date", value: (t) => formatDate(t.end) },
 ];
 
-function formatDate(d: Date): string {
+export function formatDate(d: Date): string {
 	const pad = (n: number) => String(n).padStart(2, "0");
 	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
@@ -34,15 +46,13 @@ function monthLabel(d: Date): string {
 	return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
 }
 
+/** Standalone-view entry point: filters and groups tasks, then draws the chart. */
 export function renderGantt(
 	app: App,
 	containerEl: HTMLElement,
 	allTasks: GanttTask[],
 	opts: RenderOptions
 ): void {
-	containerEl.empty();
-	containerEl.addClass("tg-container");
-
 	let tasks = allTasks;
 	if (!opts.showCompleted) {
 		tasks = tasks.filter((t) => t.statusKind !== "done" && t.statusKind !== "cancelled");
@@ -57,15 +67,53 @@ export function renderGantt(
 		);
 	}
 
+	let groups: GanttGroup[];
+	if (opts.groupByProject) {
+		const byProject = new Map<string, GanttTask[]>();
+		for (const t of tasks) {
+			const key = t.projects[0] ?? NO_PROJECT;
+			const list = byProject.get(key) ?? [];
+			list.push(t);
+			byProject.set(key, list);
+		}
+		groups = [...byProject.keys()]
+			.sort((a, b) => {
+				if (a === NO_PROJECT) return 1;
+				if (b === NO_PROJECT) return -1;
+				return a.localeCompare(b);
+			})
+			.map((name) => ({ name, tasks: byProject.get(name)! }));
+	} else {
+		groups = [{ name: "", tasks }];
+	}
+
+	renderGroupedGantt(app, containerEl, groups, {
+		pxPerDay: ZOOM_PX_PER_DAY[opts.zoom],
+		columns: DEFAULT_COLUMNS,
+	});
+}
+
+/** Draw the chart for pre-built groups with the given columns. */
+export function renderGroupedGantt(
+	app: App,
+	containerEl: HTMLElement,
+	groups: GanttGroup[],
+	opts: ChartOptions
+): void {
+	containerEl.empty();
+	containerEl.addClass("tg-container");
+
+	const tasks = groups.flatMap((g) => g.tasks);
 	if (tasks.length === 0) {
 		containerEl.createDiv({
 			cls: "tg-empty",
-			text: "No matching tasks found. Check the task tag and frontmatter field names in the plugin settings.",
+			text: "No tasks with usable dates found. Check the filters and the frontmatter field names in the TaskNotes Gantt settings.",
 		});
 		return;
 	}
 
-	const pxPerDay = ZOOM_PX_PER_DAY[opts.zoom];
+	const { pxPerDay, columns } = opts;
+	const metaWidth = columns.reduce((sum, c) => sum + c.width, 0);
 	const today = startOfDay(new Date());
 
 	let min = tasks[0].start;
@@ -87,43 +135,27 @@ export function renderGantt(
 	// Header row: database columns + timeline scale.
 	const header = table.createDiv({ cls: "tg-row tg-header" });
 	const headMeta = header.createDiv({ cls: "tg-meta" });
-	for (const col of COLUMNS) {
-		headMeta.createDiv({ cls: `tg-cell ${col.cls}`, text: col.label });
+	for (const col of columns) {
+		const cell = headMeta.createDiv({ cls: "tg-cell", text: col.label });
+		cell.style.width = `${col.width}px`;
 	}
 	const headTimeline = header.createDiv({ cls: "tg-timeline tg-timeline-header" });
 	headTimeline.style.width = `${timelineWidth}px`;
 	renderTimeScale(headTimeline, rangeStart, totalDays, pxPerDay);
 
-	// Group tasks by first project when requested.
-	const groups = new Map<string, GanttTask[]>();
-	if (opts.groupByProject) {
-		for (const t of tasks) {
-			const key = t.projects[0] ?? NO_PROJECT;
-			const list = groups.get(key) ?? [];
-			list.push(t);
-			groups.set(key, list);
-		}
-	} else {
-		groups.set("", tasks);
-	}
-	const groupNames = [...groups.keys()].sort((a, b) => {
-		if (a === NO_PROJECT) return 1;
-		if (b === NO_PROJECT) return -1;
-		return a.localeCompare(b);
-	});
-
-	for (const groupName of groupNames) {
-		if (groupName !== "") {
+	for (const group of groups) {
+		if (group.name !== "") {
 			const groupRow = table.createDiv({ cls: "tg-row tg-group" });
 			const groupMeta = groupRow.createDiv({ cls: "tg-meta" });
+			groupMeta.style.width = `${metaWidth}px`;
 			groupMeta.createDiv({
 				cls: "tg-cell tg-group-name",
-				text: `${groupName} (${groups.get(groupName)!.length})`,
+				text: `${group.name} (${group.tasks.length})`,
 			});
 			groupRow.createDiv({ cls: "tg-timeline" }).style.width = `${timelineWidth}px`;
 		}
-		for (const task of groups.get(groupName)!) {
-			renderTaskRow(app, table, task, rangeStart, today, pxPerDay, timelineWidth);
+		for (const task of group.tasks) {
+			renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth);
 		}
 	}
 }
@@ -173,6 +205,7 @@ function renderTaskRow(
 	app: App,
 	table: HTMLElement,
 	task: GanttTask,
+	columns: Column[],
 	rangeStart: Date,
 	today: Date,
 	pxPerDay: number,
@@ -181,15 +214,16 @@ function renderTaskRow(
 	const row = table.createDiv({ cls: "tg-row tg-task" });
 
 	const meta = row.createDiv({ cls: "tg-meta" });
-	for (const col of COLUMNS) {
-		const cell = meta.createDiv({ cls: `tg-cell ${col.cls}` });
-		if (col.label === "Task") {
-			const link = cell.createEl("a", { cls: "tg-task-link", text: task.title });
+	for (const col of columns) {
+		const cell = meta.createDiv({ cls: `tg-cell${col.cls ? " " + col.cls : ""}` });
+		cell.style.width = `${col.width}px`;
+		if (col.kind === "title") {
+			const link = cell.createEl("a", { cls: "tg-task-link", text: col.value(task) });
 			link.addEventListener("click", (evt) => {
 				evt.preventDefault();
 				app.workspace.openLinkText(task.file.path, "", evt.ctrlKey || evt.metaKey);
 			});
-		} else if (col.label === "Status") {
+		} else if (col.kind === "status") {
 			cell.createSpan({
 				cls: `tg-status-pill tg-status-${task.statusKind}`,
 				text: col.value(task),

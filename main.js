@@ -27,7 +27,7 @@ __export(main_exports, {
   default: () => TasknotesGanttPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/settings.ts
 var ZOOM_PX_PER_DAY = {
@@ -194,60 +194,64 @@ function hasTaskTag(fm, taskTag) {
   });
 }
 function collectTasks(app, settings) {
+  const folder = settings.taskFolder.replace(/^\/+|\/+$/g, "");
+  const tasks = [];
+  for (const file of app.vault.getMarkdownFiles()) {
+    if (folder && !(file.path === folder || file.path.startsWith(folder + "/"))) continue;
+    const task = taskFromFile(app, file, settings, true);
+    if (task) tasks.push(task);
+  }
+  tasks.sort((a, b) => a.start.getTime() - b.start.getTime() || a.title.localeCompare(b.title));
+  return tasks;
+}
+function taskFromFile(app, file, settings, requireTag) {
   var _a, _b, _c, _d, _e, _f;
   const startFields = splitFieldList(settings.startFields);
   const endFields = splitFieldList(settings.endFields);
   const createdFields = splitFieldList(settings.createdFields);
   const completedFields = splitFieldList(settings.completedFields);
-  const folder = settings.taskFolder.replace(/^\/+|\/+$/g, "");
   const today = startOfDay(/* @__PURE__ */ new Date());
-  const tasks = [];
-  for (const file of app.vault.getMarkdownFiles()) {
-    if (folder && !(file.path === folder || file.path.startsWith(folder + "/"))) continue;
-    const fm = (_a = app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
-    if (!fm) continue;
-    if (!hasTaskTag(fm, settings.taskTag)) continue;
-    const status = String((_b = fm["status"]) != null ? _b : "");
-    const statusKind = classifyStatus(status, settings);
-    let start = parseDate(firstField(fm, startFields));
-    let end = parseDate(firstField(fm, endFields));
-    let endInferred = false;
-    if (!start) start = parseDate(firstField(fm, createdFields));
-    if (!end) {
-      endInferred = true;
-      if (statusKind === "done" || statusKind === "cancelled") {
-        end = (_c = parseDate(firstField(fm, completedFields))) != null ? _c : start;
-      } else {
-        end = today;
-      }
+  const fm = (_a = app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+  if (!fm) return null;
+  if (requireTag && !hasTaskTag(fm, settings.taskTag)) return null;
+  const status = String((_b = fm["status"]) != null ? _b : "");
+  const statusKind = classifyStatus(status, settings);
+  let start = parseDate(firstField(fm, startFields));
+  let end = parseDate(firstField(fm, endFields));
+  let endInferred = false;
+  if (!start) start = parseDate(firstField(fm, createdFields));
+  if (!end) {
+    endInferred = true;
+    if (statusKind === "done" || statusKind === "cancelled") {
+      end = (_c = parseDate(firstField(fm, completedFields))) != null ? _c : start;
+    } else {
+      end = today;
     }
-    if (!start && end) start = end;
-    if (!start || !end) continue;
-    if (end < start) end = start;
-    tasks.push({
-      file,
-      title: String((_d = fm["title"]) != null ? _d : file.basename),
-      status,
-      statusKind,
-      priority: String((_e = fm["priority"]) != null ? _e : "").replace(/^"+|"+$/g, ""),
-      projects: asArray((_f = fm["projects"]) != null ? _f : fm["project"]).map(projectDisplayName),
-      start,
-      end,
-      endInferred
-    });
   }
-  tasks.sort((a, b) => a.start.getTime() - b.start.getTime() || a.title.localeCompare(b.title));
-  return tasks;
+  if (!start && end) start = end;
+  if (!start || !end) return null;
+  if (end < start) end = start;
+  return {
+    file,
+    title: String((_d = fm["title"]) != null ? _d : file.basename),
+    status,
+    statusKind,
+    priority: String((_e = fm["priority"]) != null ? _e : "").replace(/^"+|"+$/g, ""),
+    projects: asArray((_f = fm["projects"]) != null ? _f : fm["project"]).map(projectDisplayName),
+    start,
+    end,
+    endInferred
+  };
 }
 
 // src/render.ts
 var NO_PROJECT = "(no project)";
-var COLUMNS = [
-  { label: "Task", cls: "tg-col-title", value: (t) => t.title },
-  { label: "Status", cls: "tg-col-status", value: (t) => t.status || "open" },
-  { label: "Priority", cls: "tg-col-priority", value: (t) => t.priority },
-  { label: "Start", cls: "tg-col-date", value: (t) => formatDate(t.start) },
-  { label: "End", cls: "tg-col-date", value: (t) => formatDate(t.end) }
+var DEFAULT_COLUMNS = [
+  { label: "Task", width: 220, kind: "title", value: (t) => t.title },
+  { label: "Status", width: 110, kind: "status", value: (t) => t.status || "open" },
+  { label: "Priority", width: 80, kind: "text", value: (t) => t.priority },
+  { label: "Start", width: 95, kind: "text", cls: "tg-col-date", value: (t) => formatDate(t.start) },
+  { label: "End", width: 95, kind: "text", cls: "tg-col-date", value: (t) => formatDate(t.end) }
 ];
 function formatDate(d) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -258,8 +262,6 @@ function monthLabel(d) {
 }
 function renderGantt(app, containerEl, allTasks, opts) {
   var _a, _b;
-  containerEl.empty();
-  containerEl.addClass("tg-container");
   let tasks = allTasks;
   if (!opts.showCompleted) {
     tasks = tasks.filter((t) => t.statusKind !== "done" && t.statusKind !== "cancelled");
@@ -270,14 +272,41 @@ function renderGantt(app, containerEl, allTasks, opts) {
       (t) => t.title.toLowerCase().includes(needle) || t.status.toLowerCase().includes(needle) || t.projects.some((p) => p.toLowerCase().includes(needle))
     );
   }
+  let groups;
+  if (opts.groupByProject) {
+    const byProject = /* @__PURE__ */ new Map();
+    for (const t of tasks) {
+      const key = (_a = t.projects[0]) != null ? _a : NO_PROJECT;
+      const list = (_b = byProject.get(key)) != null ? _b : [];
+      list.push(t);
+      byProject.set(key, list);
+    }
+    groups = [...byProject.keys()].sort((a, b) => {
+      if (a === NO_PROJECT) return 1;
+      if (b === NO_PROJECT) return -1;
+      return a.localeCompare(b);
+    }).map((name) => ({ name, tasks: byProject.get(name) }));
+  } else {
+    groups = [{ name: "", tasks }];
+  }
+  renderGroupedGantt(app, containerEl, groups, {
+    pxPerDay: ZOOM_PX_PER_DAY[opts.zoom],
+    columns: DEFAULT_COLUMNS
+  });
+}
+function renderGroupedGantt(app, containerEl, groups, opts) {
+  containerEl.empty();
+  containerEl.addClass("tg-container");
+  const tasks = groups.flatMap((g) => g.tasks);
   if (tasks.length === 0) {
     containerEl.createDiv({
       cls: "tg-empty",
-      text: "No matching tasks found. Check the task tag and frontmatter field names in the plugin settings."
+      text: "No tasks with usable dates found. Check the filters and the frontmatter field names in the TaskNotes Gantt settings."
     });
     return;
   }
-  const pxPerDay = ZOOM_PX_PER_DAY[opts.zoom];
+  const { pxPerDay, columns } = opts;
+  const metaWidth = columns.reduce((sum, c) => sum + c.width, 0);
   const today = startOfDay(/* @__PURE__ */ new Date());
   let min = tasks[0].start;
   let max = tasks[0].end;
@@ -295,40 +324,26 @@ function renderGantt(app, containerEl, allTasks, opts) {
   const table = scroller.createDiv({ cls: "tg-table" });
   const header = table.createDiv({ cls: "tg-row tg-header" });
   const headMeta = header.createDiv({ cls: "tg-meta" });
-  for (const col of COLUMNS) {
-    headMeta.createDiv({ cls: `tg-cell ${col.cls}`, text: col.label });
+  for (const col of columns) {
+    const cell = headMeta.createDiv({ cls: "tg-cell", text: col.label });
+    cell.style.width = `${col.width}px`;
   }
   const headTimeline = header.createDiv({ cls: "tg-timeline tg-timeline-header" });
   headTimeline.style.width = `${timelineWidth}px`;
   renderTimeScale(headTimeline, rangeStart, totalDays, pxPerDay);
-  const groups = /* @__PURE__ */ new Map();
-  if (opts.groupByProject) {
-    for (const t of tasks) {
-      const key = (_a = t.projects[0]) != null ? _a : NO_PROJECT;
-      const list = (_b = groups.get(key)) != null ? _b : [];
-      list.push(t);
-      groups.set(key, list);
-    }
-  } else {
-    groups.set("", tasks);
-  }
-  const groupNames = [...groups.keys()].sort((a, b) => {
-    if (a === NO_PROJECT) return 1;
-    if (b === NO_PROJECT) return -1;
-    return a.localeCompare(b);
-  });
-  for (const groupName of groupNames) {
-    if (groupName !== "") {
+  for (const group of groups) {
+    if (group.name !== "") {
       const groupRow = table.createDiv({ cls: "tg-row tg-group" });
       const groupMeta = groupRow.createDiv({ cls: "tg-meta" });
+      groupMeta.style.width = `${metaWidth}px`;
       groupMeta.createDiv({
         cls: "tg-cell tg-group-name",
-        text: `${groupName} (${groups.get(groupName).length})`
+        text: `${group.name} (${group.tasks.length})`
       });
       groupRow.createDiv({ cls: "tg-timeline" }).style.width = `${timelineWidth}px`;
     }
-    for (const task of groups.get(groupName)) {
-      renderTaskRow(app, table, task, rangeStart, today, pxPerDay, timelineWidth);
+    for (const task of group.tasks) {
+      renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth);
     }
   }
 }
@@ -364,19 +379,20 @@ function renderTimeScale(el, rangeStart, totalDays, pxPerDay) {
     }
   }
 }
-function renderTaskRow(app, table, task, rangeStart, today, pxPerDay, timelineWidth) {
+function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth) {
   var _a;
   const row = table.createDiv({ cls: "tg-row tg-task" });
   const meta = row.createDiv({ cls: "tg-meta" });
-  for (const col of COLUMNS) {
-    const cell = meta.createDiv({ cls: `tg-cell ${col.cls}` });
-    if (col.label === "Task") {
-      const link = cell.createEl("a", { cls: "tg-task-link", text: task.title });
+  for (const col of columns) {
+    const cell = meta.createDiv({ cls: `tg-cell${col.cls ? " " + col.cls : ""}` });
+    cell.style.width = `${col.width}px`;
+    if (col.kind === "title") {
+      const link = cell.createEl("a", { cls: "tg-task-link", text: col.value(task) });
       link.addEventListener("click", (evt) => {
         evt.preventDefault();
         app.workspace.openLinkText(task.file.path, "", evt.ctrlKey || evt.metaKey);
       });
-    } else if (col.label === "Status") {
+    } else if (col.kind === "status") {
       cell.createSpan({
         cls: `tg-status-pill tg-status-${task.statusKind}`,
         text: col.value(task)
@@ -503,8 +519,85 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
   }
 };
 
+// src/basesView.ts
+var import_obsidian3 = require("obsidian");
+var GANTT_BASES_VIEW_ID = "tasknotes-gantt";
+var GanttBasesView = class extends import_obsidian3.BasesView {
+  constructor(controller, containerEl, plugin) {
+    super(controller);
+    this.type = GANTT_BASES_VIEW_ID;
+    this.plugin = plugin;
+    this.rootEl = containerEl.createDiv({ cls: "tg-chart tg-bases" });
+  }
+  onDataUpdated() {
+    const settings = this.plugin.settings;
+    const groups = [];
+    const entryByPath = /* @__PURE__ */ new Map();
+    for (const group of this.data.groupedData) {
+      const tasks = [];
+      for (const entry of group.entries) {
+        const task = taskFromFile(this.app, entry.file, settings, false);
+        if (!task) continue;
+        tasks.push(task);
+        entryByPath.set(entry.file.path, entry);
+      }
+      if (tasks.length === 0) continue;
+      groups.push({ name: this.groupLabel(group.key), tasks });
+    }
+    renderGroupedGantt(this.app, this.rootEl, groups, {
+      pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
+      columns: this.buildColumns(entryByPath)
+    });
+  }
+  zoom() {
+    const value = this.config.get("zoom");
+    if (value === "day" || value === "week" || value === "month") return value;
+    return this.plugin.settings.defaultZoom;
+  }
+  groupLabel(key) {
+    if (key == null) return "";
+    const text = String(key);
+    if (!text || text === "null") return "";
+    return /^\[\[.*\]\]$/.test(text) ? projectDisplayName(text) : text;
+  }
+  /** Title column plus one column per visible property configured on the base. */
+  buildColumns(entryByPath) {
+    const columns = [DEFAULT_COLUMNS[0]];
+    for (const prop of this.config.getOrder()) {
+      if (prop === "file.name") continue;
+      const label = this.config.getDisplayName(prop);
+      const isStatus = prop === "note.status" || label.toLowerCase() === "status";
+      columns.push({
+        label,
+        width: isStatus ? 110 : 120,
+        kind: isStatus ? "status" : "text",
+        value: (task) => {
+          const entry = entryByPath.get(task.file.path);
+          const value = entry == null ? void 0 : entry.getValue(prop);
+          if (value == null) return "";
+          const text = value.toString();
+          return /^\[\[.*\]\]$/.test(text) ? projectDisplayName(text) : text;
+        }
+      });
+    }
+    if (columns.length === 1) return DEFAULT_COLUMNS;
+    return columns;
+  }
+};
+function ganttBasesOptions() {
+  return [
+    {
+      type: "dropdown",
+      key: "zoom",
+      displayName: "Zoom",
+      default: "week",
+      options: { day: "Day", week: "Week", month: "Month" }
+    }
+  ];
+}
+
 // src/main.ts
-var TasknotesGanttPlugin = class extends import_obsidian3.Plugin {
+var TasknotesGanttPlugin = class extends import_obsidian4.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
@@ -512,6 +605,14 @@ var TasknotesGanttPlugin = class extends import_obsidian3.Plugin {
   async onload() {
     await this.loadSettings();
     this.registerView(VIEW_TYPE_TASKNOTES_GANTT, (leaf) => new TasknotesGanttView(leaf, this));
+    if (typeof this.registerBasesView === "function") {
+      this.registerBasesView(GANTT_BASES_VIEW_ID, {
+        name: "TaskNotes Gantt",
+        icon: "gantt-chart",
+        factory: (controller, containerEl) => new GanttBasesView(controller, containerEl, this),
+        options: () => ganttBasesOptions()
+      });
+    }
     this.addRibbonIcon("gantt-chart", "Open TaskNotes Gantt chart", () => {
       void this.activateView();
     });

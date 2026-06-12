@@ -47,6 +47,12 @@
 	height: 100%;
 }
 
+/* When rendered as a Bases layout, fill the area below the Bases toolbar. */
+.tg-bases {
+	height: 100%;
+	overflow: hidden;
+}
+
 .tg-empty {
 	padding: 24px;
 	color: var(--text-muted);
@@ -91,20 +97,8 @@
 	flex: 0 0 auto;
 }
 
-.tg-col-title {
-	width: 220px;
-}
-
-.tg-col-status {
-	width: 110px;
-}
-
-.tg-col-priority {
-	width: 80px;
-}
-
+/* Column widths are set inline; this only styles date cells. */
 .tg-col-date {
-	width: 95px;
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
 }
@@ -176,7 +170,6 @@
 
 .tg-group .tg-meta {
 	background: var(--background-secondary-alt);
-	width: 600px;
 }
 
 .tg-group-name {

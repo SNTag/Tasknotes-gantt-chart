@@ -31,6 +31,20 @@ For each task it determines:
 | **Group** | first entry in `projects` (wikilinks are resolved to a display name) |
 | **Color** | `status` — open (gray), in-progress (blue), done (green), cancelled (faded); overdue tasks get a red outline |
 
+## Using it as a Bases layout (database view)
+
+On Obsidian 1.10+ the plugin registers a **"TaskNotes Gantt"** layout for [Bases](https://help.obsidian.md/bases), so it appears in the same Layout dropdown as Table, Cards, and the TaskNotes layouts:
+
+1. Create or open a base (e.g. the one TaskNotes generates), or insert one in a note.
+2. Open **Configure view → Layout** and pick **TaskNotes Gantt**.
+3. The base drives everything database-style:
+   - **Filters** decide which notes are charted (the task tag is not required here — your base's filters are trusted).
+   - **Group by** (e.g. `projects`) becomes the row groups.
+   - **Properties** (visible columns) become the table columns on the left.
+   - **Sort** controls row order; a **Zoom** option (Day/Week/Month) is in the view options.
+
+Dates for the bars are still resolved from frontmatter using the field mappings in the plugin settings (`scheduled`/`due` with created/modified fallbacks).
+
 ## Features
 
 - **Database view layout** — sticky columns (Task / Status / Priority / Start / End) plus timeline bars, grouped by project.
