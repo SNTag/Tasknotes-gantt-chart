@@ -363,9 +363,7 @@ var NO_PROJECT = "(no project)";
 var DEFAULT_COLUMNS = [
   { label: "Task", width: 220, kind: "title", value: (t) => t.title },
   { label: "Status", width: 110, kind: "status", value: (t) => t.status || "open" },
-  { label: "Priority", width: 80, kind: "text", value: (t) => t.priority },
-  { label: "Start", width: 95, kind: "text", cls: "tg-col-date", value: (t) => formatDate(t.start) },
-  { label: "End", width: 95, kind: "text", cls: "tg-col-date", value: (t) => formatDate(t.end) }
+  { label: "Priority", width: 80, kind: "text", value: (t) => t.priority }
 ];
 function formatDate(d) {
   const pad = (n) => String(n).padStart(2, "0");

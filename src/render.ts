@@ -67,8 +67,6 @@ export const DEFAULT_COLUMNS: Column[] = [
 	{ label: "Task", width: 220, kind: "title", value: (t) => t.title },
 	{ label: "Status", width: 110, kind: "status", value: (t) => t.status || "open" },
 	{ label: "Priority", width: 80, kind: "text", value: (t) => t.priority },
-	{ label: "Start", width: 95, kind: "text", cls: "tg-col-date", value: (t) => formatDate(t.start) },
-	{ label: "End", width: 95, kind: "text", cls: "tg-col-date", value: (t) => formatDate(t.end) },
 ];
 
 export function formatDate(d: Date): string {

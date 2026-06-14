@@ -2,7 +2,7 @@
 
 An Obsidian plugin that generates a **Gantt chart in a database view format** from your [TaskNotes](https://github.com/callumalpass/tasknotes)-style notes (one note per task, metadata in YAML frontmatter).
 
-Each task row shows database columns (task, status, priority, start, end) pinned on the left, with a scrollable timeline of Gantt bars on the right. Tasks are grouped by their linked project.
+Each task row shows database columns (task, status, priority) pinned on the left, with a scrollable timeline of Gantt bars on the right. Tasks are grouped by their linked project.
 
 ## How it works
 
@@ -58,7 +58,7 @@ Dates for the bars are still resolved from frontmatter using the field mappings 
 
 ## Features
 
-- **Database view layout** — sticky columns (Task / Status / Priority / Start / End) plus timeline bars, grouped by project.
+- **Database view layout** — sticky columns (Task / Status / Priority) plus timeline bars, grouped by project. The start and end dates remain visible on each bar's hover tooltip.
 - **Toolbar** — text filter, Day/Week/Month zoom, group-by-project toggle, show/hide completed, manual refresh.
 - **Live updates** — the chart refreshes automatically when your notes change.
 - **Click to open** — clicking a task name or its bar opens the note (Ctrl/Cmd-click opens in a new tab).

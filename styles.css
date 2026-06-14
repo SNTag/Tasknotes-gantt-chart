@@ -129,12 +129,6 @@
 	flex: 0 0 auto;
 }
 
-/* Column widths are set inline; this only styles date cells. */
-.tg-col-date {
-	color: var(--text-muted);
-	font-variant-numeric: tabular-nums;
-}
-
 /* --- Header --- */
 
 .tg-header {

@@ -1,7 +1,7 @@
 {
 	"id": "tasknotes-gantt",
 	"name": "TaskNotes Gantt Chart",
-	"version": "0.4.0",
+	"version": "0.5.0",
 	"minAppVersion": "1.4.0",
 	"description": "Generates a Gantt chart in a database view format from TaskNotes-style frontmatter.",
 	"author": "TaskNotes Gantt Chart contributors",
