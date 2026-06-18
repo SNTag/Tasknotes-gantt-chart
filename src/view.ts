@@ -3,7 +3,7 @@ import type { App } from "obsidian";
 import type TasknotesGanttPlugin from "./main";
 import { ZOOM_PX_PER_DAY, ZoomLevel } from "./settings";
 import { GanttTask, collectProjectParents, collectProjectTree, collectTasks, pruneEmptyGroups } from "./tasks";
-import { DEFAULT_COLUMNS, assignSubprojectColors, renderGantt, renderGroupedGantt } from "./render";
+import { DEFAULT_COLUMNS, assignDepthColors, renderGantt, renderGroupedGantt } from "./render";
 
 export const VIEW_TYPE_TASKNOTES_GANTT = "tasknotes-gantt-view";
 
@@ -178,7 +178,7 @@ export class TasknotesGanttView extends ItemView {
 				this.maxDepth
 			).map((group) => ({ ...group, tasks: group.tasks.filter((t) => this.matchesFilters(t)) }));
 			const pruned = pruneEmptyGroups(groups);
-			assignSubprojectColors(pruned);
+			assignDepthColors(pruned);
 			renderGroupedGantt(this.app, this.chartEl, pruned, {
 				pxPerDay: ZOOM_PX_PER_DAY[this.zoom],
 				columns: DEFAULT_COLUMNS,

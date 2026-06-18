@@ -1,6 +1,12 @@
 import type { App, TFile } from "obsidian";
 import { ZoomLevel, ZOOM_PX_PER_DAY } from "./settings";
 import { GanttTask, addDays, daysBetween, startOfDay } from "./tasks";
+import {
+	PriorityVisual,
+	buildPriorityMap,
+	buildStatusColorMap,
+	priorityVisual,
+} from "./tasknotesData";
 
 export interface RenderOptions {
 	zoom: ZoomLevel;
@@ -40,18 +46,13 @@ const GROUP_PALETTE = [
 ];
 
 /**
- * Give each first-level sub-project (depth 1) a distinct palette color,
- * inherited by its deeper sub-projects. Depth-0 (the parent itself) keeps
- * the default status-based bar colors.
+ * Color every group (and its task rows) by nesting depth: depth 0, 1, 2…
+ * each get a distinct palette color, so the hierarchy level reads at a glance.
+ * Task bars themselves are colored by status, not by this.
  */
-export function assignSubprojectColors(groups: GanttGroup[]): void {
-	let next = 0;
-	let current: string | undefined;
+export function assignDepthColors(groups: GanttGroup[]): void {
 	for (const group of groups) {
-		const depth = group.depth ?? 0;
-		if (depth === 0) current = undefined;
-		else if (depth === 1) current = GROUP_PALETTE[next++ % GROUP_PALETTE.length];
-		group.color = current;
+		group.color = GROUP_PALETTE[(group.depth ?? 0) % GROUP_PALETTE.length];
 	}
 }
 
@@ -64,9 +65,7 @@ export interface ChartOptions {
 const NO_PROJECT = "(no project)";
 
 export const DEFAULT_COLUMNS: Column[] = [
-	{ label: "Task", width: 220, kind: "title", value: (t) => t.title },
-	{ label: "Status", width: 110, kind: "status", value: (t) => t.status || "open" },
-	{ label: "Priority", width: 80, kind: "text", value: (t) => t.priority },
+	{ label: "Task", width: 260, kind: "title", value: (t) => t.title },
 ];
 
 export function formatDate(d: Date): string {
@@ -149,6 +148,8 @@ export function renderGroupedGantt(
 	const { pxPerDay, columns } = opts;
 	const metaWidth = columns.reduce((sum, c) => sum + c.width, 0);
 	const today = startOfDay(new Date());
+	const statusColors = buildStatusColorMap(app);
+	const priorityMap = buildPriorityMap(app);
 
 	let min = tasks[0].start;
 	let max = tasks[0].end;
@@ -202,17 +203,11 @@ export function renderGroupedGantt(
 			groupRow.createDiv({ cls: "tg-timeline" }).style.width = `${timelineWidth}px`;
 		}
 		for (const task of group.tasks) {
-			renderTaskRow(
-				app,
-				table,
-				task,
-				columns,
-				rangeStart,
-				today,
-				pxPerDay,
-				timelineWidth,
-				group.color
-			);
+			renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth, {
+				depthColor: group.color,
+				statusColors,
+				priorityMap,
+			});
 		}
 	}
 }
@@ -258,6 +253,15 @@ function renderTimeScale(
 	}
 }
 
+interface RowVisuals {
+	/** Row tint/accent color for the nesting depth. */
+	depthColor?: string;
+	/** TaskNotes status value -> color. */
+	statusColors: Map<string, string>;
+	/** TaskNotes priority value -> symbol/color. */
+	priorityMap: Map<string, PriorityVisual>;
+}
+
 function renderTaskRow(
 	app: App,
 	table: HTMLElement,
@@ -267,15 +271,27 @@ function renderTaskRow(
 	today: Date,
 	pxPerDay: number,
 	timelineWidth: number,
-	barColor?: string
+	visuals: RowVisuals
 ): void {
 	const row = table.createDiv({ cls: "tg-row tg-task" });
+	if (visuals.depthColor) {
+		row.addClass("tg-has-depth");
+		row.style.setProperty("--tg-depth", visuals.depthColor);
+	}
+
+	const prio = priorityVisual(task.priority, visuals.priorityMap);
 
 	const meta = row.createDiv({ cls: "tg-meta" });
 	for (const col of columns) {
 		const cell = meta.createDiv({ cls: `tg-cell${col.cls ? " " + col.cls : ""}` });
 		cell.style.width = `${col.width}px`;
 		if (col.kind === "title") {
+			if (prio.symbol) {
+				const sym = cell.createSpan({ cls: "tg-prio", text: prio.symbol });
+				if (prio.color) sym.style.color = prio.color;
+				sym.setAttr("aria-label", `Priority: ${task.priority}`);
+				sym.setAttr("title", `Priority: ${task.priority}`);
+			}
 			const link = cell.createEl("a", { cls: "tg-task-link", text: col.value(task) });
 			link.addEventListener("click", (evt) => {
 				evt.preventDefault();
@@ -311,15 +327,17 @@ function renderTaskRow(
 	});
 	bar.style.left = `${left}px`;
 	bar.style.width = `${width}px`;
-	if (barColor) {
+	// Bar is colored by status, using the exact TaskNotes status color when available.
+	const statusColor = visuals.statusColors.get(task.status.toLowerCase());
+	if (statusColor) {
 		bar.addClass("tg-bar-colored");
-		bar.style.background = barColor;
+		bar.style.background = statusColor;
 	}
 	bar.setAttr(
 		"aria-label",
 		`${task.title}\n${formatDate(task.start)} → ${formatDate(task.end)}${
 			task.endInferred ? " (end inferred)" : ""
-		}\nStatus: ${task.status || "open"}`
+		}\nStatus: ${task.status || "open"}${task.priority ? `\nPriority: ${task.priority}` : ""}`
 	);
 	bar.setAttr("title", bar.getAttr("aria-label") ?? "");
 	if (width >= 60) {

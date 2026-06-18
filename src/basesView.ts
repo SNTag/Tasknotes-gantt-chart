@@ -1,17 +1,34 @@
-import { BasesView } from "obsidian";
+import { BasesView, TFile } from "obsidian";
 import type { BasesAllOptions, BasesEntry, QueryController } from "obsidian";
 import type TasknotesGanttPlugin from "./main";
 import { ZoomLevel, ZOOM_PX_PER_DAY } from "./settings";
-import { GanttTask, projectDisplayName, taskFromFile } from "./tasks";
-import { Column, DEFAULT_COLUMNS, GanttGroup, renderGroupedGantt } from "./render";
+import {
+	GanttTask,
+	collectProjectTree,
+	projectDisplayName,
+	pruneEmptyGroups,
+	taskFromFile,
+} from "./tasks";
+import {
+	Column,
+	DEFAULT_COLUMNS,
+	GanttGroup,
+	assignDepthColors,
+	renderGroupedGantt,
+} from "./render";
 
 export const GANTT_BASES_VIEW_ID = "tasknotes-gantt";
 
 /**
  * Bases layout ("database view") for the Gantt chart. Appears in the Bases
- * view selector next to Table, Cards, and the TaskNotes layouts. The base's
- * own filters decide which notes are included, its "group by" drives the row
- * groups, and its visible properties become the table columns.
+ * view selector next to Table, Cards, and the TaskNotes layouts.
+ *
+ * Two modes, chosen by the view options:
+ *  - No parent note: the base's filters select notes, its group-by drives the
+ *    row groups, and its visible properties become the table columns.
+ *  - Parent note set: the chart walks that note's `projects` hierarchy up to the
+ *    chosen depth (like the standalone view), restricted to notes that pass the
+ *    base's filters. Rows are colored by depth.
  */
 export class GanttBasesView extends BasesView {
 	type = GANTT_BASES_VIEW_ID;
@@ -25,6 +42,37 @@ export class GanttBasesView extends BasesView {
 	}
 
 	onDataUpdated(): void {
+		const parent = this.parentNote();
+		if (parent) {
+			this.renderParentScoped(parent);
+		} else {
+			this.renderGrouped();
+		}
+	}
+
+	/** Hierarchical mode: walk the parent note's project tree, filtered by the base. */
+	private renderParentScoped(parent: TFile): void {
+		const allowed = new Set(this.data.data.map((e) => e.file.path));
+		const groups = collectProjectTree(
+			this.app,
+			this.plugin.settings,
+			parent,
+			this.depth()
+		).map((group) => ({
+			...group,
+			tasks: group.tasks.filter((t) => allowed.has(t.file.path)),
+		}));
+		const pruned = pruneEmptyGroups(groups);
+		assignDepthColors(pruned);
+		renderGroupedGantt(this.app, this.rootEl, pruned, {
+			pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
+			columns: DEFAULT_COLUMNS,
+			emptyText: `No tasks from this base fall under "${parent.basename}". Tasks belong to a project when their 'projects' frontmatter links to it (directly or through a sub-project within the depth limit).`,
+		});
+	}
+
+	/** Flat mode: one group per the base's group-by value. */
+	private renderGrouped(): void {
 		const settings = this.plugin.settings;
 		const groups: GanttGroup[] = [];
 		const entryByPath = new Map<string, BasesEntry>();
@@ -46,6 +94,22 @@ export class GanttBasesView extends BasesView {
 			pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
 			columns: this.buildColumns(entryByPath),
 		});
+	}
+
+	private parentNote(): TFile | null {
+		const value = this.config.get("parentNote");
+		if (typeof value !== "string" || !value.trim()) return null;
+		const path = value.replace(/^\[\[|\]\]$/g, "").split("|")[0].trim();
+		const direct = this.app.vault.getAbstractFileByPath(path);
+		if (direct instanceof TFile) return direct;
+		const resolved = this.app.metadataCache.getFirstLinkpathDest(path, "");
+		return resolved instanceof TFile ? resolved : null;
+	}
+
+	private depth(): number {
+		const value = Number(this.config.get("depth"));
+		if (Number.isFinite(value) && value >= 1) return Math.min(value, 6);
+		return this.plugin.settings.maxDepth;
 	}
 
 	private zoom(): ZoomLevel {
@@ -89,6 +153,20 @@ export class GanttBasesView extends BasesView {
 
 export function ganttBasesOptions(): BasesAllOptions[] {
 	return [
+		{
+			type: "file",
+			key: "parentNote",
+			displayName: "Parent note",
+			placeholder: "Optional — scope to a project tree",
+			filter: (file: TFile) => file.extension === "md",
+		},
+		{
+			type: "dropdown",
+			key: "depth",
+			displayName: "Sub-project depth",
+			default: "3",
+			options: { "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6" },
+		},
 		{
 			type: "dropdown",
 			key: "zoom",

@@ -29,7 +29,9 @@ For each task it determines:
 | **Start** | `scheduled`, `start`, `startDate` → falls back to `date created` / `dateCreated` |
 | **End** | `due`, `end`, `endDate`, `deadline` → for done tasks falls back to `completedDate` / `date modified`; for open tasks the bar runs to **today** (drawn with a dashed edge to show the end is inferred) |
 | **Group** | first entry in `projects` (wikilinks are resolved to a display name, e.g. `Example Project Overview`) |
-| **Color** | `status` — open (gray), in-progress (blue), done (green), cancelled (faded); overdue tasks get a red outline |
+| **Bar color** | `status` — using the **exact color you configured in TaskNotes** (read from its `customStatuses`); falls back to built-in colors if TaskNotes isn't installed. Overdue tasks get a red outline |
+| **Priority** | shown as a symbol before the task name (⏫ / 🔺 / 🔸 / 🔻 / ⏬), tinted with the TaskNotes priority color |
+| **Row tint** | nesting depth in a parent-scoped tree (each level a distinct color) |
 
 ## Scoping to a parent project (recursive)
 
@@ -37,7 +39,7 @@ You can point the chart at one parent note (e.g. `Example Project Overview`) and
 
 - Click **Parent note…** in the Gantt view toolbar and pick the note (the picker lists every note that is referenced as a project), or open the parent note and run the command **"Open Gantt chart for current note (as parent project)"**.
 - The chart then walks the hierarchy recursively: tasks whose `projects` frontmatter links to the parent, sub-project notes that link to it, those sub-projects' tasks, and so on — down to the **Depth** selected in the toolbar (1–6, default in settings).
-- Each project becomes an indented, clickable section header; tasks appear under the nearest project that links them. Every first-level sub-project gets a distinct color (header dot + task bars, inherited by its deeper sub-projects), while the parent's own tasks keep status-based colors. Projects with no tasks anywhere in their subtree are hidden. Cycles and duplicates are handled (a task is only listed once).
+- Each project becomes an indented, clickable section header; tasks appear under the nearest project that links them. **Each task row is tinted by its nesting depth** (depth 0, 1, 2… each a distinct color, also shown as the section-header dot), while **each task bar is colored by its status** (TaskNotes colors) and shows a **priority symbol** before its name. Projects with no tasks anywhere in their subtree are hidden. Cycles and duplicates are handled (a task is only listed once).
 - Click ✕ on the parent chip to go back to charting all tasks.
 
 Note that membership follows the TaskNotes model: a note is a child of a project when its **`projects` frontmatter** links to it. Plain `[[wikilinks]]` in a note's body do not create hierarchy edges.
@@ -54,11 +56,18 @@ On Obsidian 1.10+ the plugin registers a **"TaskNotes Gantt"** layout for [Bases
    - **Properties** (visible columns) become the table columns on the left.
    - **Sort** controls row order; a **Zoom** option (Day/Week/Month) is in the view options.
 
+### Assigning a parent note and depth in the database view
+
+The Bases layout has two **view options** (open the layout's options menu, the same place as Zoom):
+
+- **Parent note** — pick a note to scope the chart to that project's recursive subtree. When set, it overrides the base's group-by and instead walks the `projects` hierarchy (rows tinted by depth, just like the standalone view), while still honoring the base's **filters** (only notes that pass the base's filters appear).
+- **Sub-project depth** — how many levels of sub-projects to follow below the parent (1–6). Leave **Parent note** empty to go back to plain group-by behavior.
+
 Dates for the bars are still resolved from frontmatter using the field mappings in the plugin settings (`scheduled`/`due` with created/modified fallbacks).
 
 ## Features
 
-- **Database view layout** — sticky columns (Task / Status / Priority) plus timeline bars, grouped by project. The start and end dates remain visible on each bar's hover tooltip.
+- **Database view layout** — a sticky Task column plus timeline bars, grouped by project. Status, priority, and the start/end dates are encoded visually (bar color, priority symbol, hover tooltip) rather than as extra columns.
 - **Toolbar** — text filter, Day/Week/Month zoom, group-by-project toggle, show/hide completed, manual refresh.
 - **Live updates** — the chart refreshes automatically when your notes change.
 - **Click to open** — clicking a task name or its bar opens the note (Ctrl/Cmd-click opens in a new tab).

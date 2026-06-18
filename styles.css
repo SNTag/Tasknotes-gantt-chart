@@ -221,6 +221,31 @@
 	background: var(--background-modifier-hover);
 }
 
+/* Depth coloring: the row is tinted by its nesting level (--tg-depth). */
+.tg-task.tg-has-depth {
+	background: color-mix(in srgb, var(--tg-depth) 7%, transparent);
+}
+
+.tg-task.tg-has-depth:hover {
+	background: color-mix(in srgb, var(--tg-depth) 14%, var(--background-modifier-hover));
+}
+
+.tg-task.tg-has-depth .tg-meta {
+	border-left: 3px solid var(--tg-depth);
+	background: color-mix(in srgb, var(--tg-depth) 8%, var(--background-primary));
+}
+
+.tg-task.tg-has-depth:hover .tg-meta {
+	background: color-mix(in srgb, var(--tg-depth) 14%, var(--background-modifier-hover));
+}
+
+/* Priority symbol in front of the task title. */
+.tg-prio {
+	margin-right: 5px;
+	font-size: 11px;
+	flex: 0 0 auto;
+}
+
 .tg-task-link {
 	cursor: pointer;
 	color: var(--text-normal);
@@ -312,10 +337,10 @@
 	opacity: 0.7;
 }
 
-/* Project-colored bars: status is still shown by the pill; done/cancelled dim. */
+/* Bars colored by the exact TaskNotes status color; done/cancelled dim slightly. */
 .tg-bar.tg-bar-colored.tg-status-done,
 .tg-bar.tg-bar-colored.tg-status-cancelled {
-	opacity: 0.5;
+	opacity: 0.6;
 }
 
 .tg-bar.tg-bar-inferred {

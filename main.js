@@ -337,6 +337,67 @@ function pruneEmptyGroups(groups) {
   return groups.filter((_, i) => keep[i]);
 }
 
+// src/tasknotesData.ts
+function tasknotesSettings(app) {
+  var _a, _b;
+  const plugins = (_a = app.plugins) == null ? void 0 : _a.plugins;
+  const tn = plugins == null ? void 0 : plugins.tasknotes;
+  return (_b = tn == null ? void 0 : tn.settings) != null ? _b : null;
+}
+function buildStatusColorMap(app) {
+  var _a;
+  const map = /* @__PURE__ */ new Map();
+  const settings = tasknotesSettings(app);
+  const statuses = (_a = settings == null ? void 0 : settings.customStatuses) != null ? _a : [];
+  for (const st of statuses) {
+    if ((st == null ? void 0 : st.value) && (st == null ? void 0 : st.color)) map.set(String(st.value).toLowerCase(), String(st.color));
+  }
+  return map;
+}
+var NAME_SYMBOLS = {
+  highest: "\u23EB",
+  urgent: "\u23EB",
+  critical: "\u23EB",
+  high: "\u{1F53A}",
+  important: "\u{1F53A}",
+  medium: "\u{1F538}",
+  normal: "\u{1F538}",
+  moderate: "\u{1F538}",
+  low: "\u{1F53B}",
+  lowest: "\u23EC",
+  trivial: "\u23EC"
+};
+var SYMBOL_LADDER = ["\u23EB", "\u{1F53A}", "\u{1F538}", "\u{1F53B}", "\u23EC"];
+function buildPriorityMap(app) {
+  var _a;
+  const map = /* @__PURE__ */ new Map();
+  const settings = tasknotesSettings(app);
+  const priorities = (_a = settings == null ? void 0 : settings.customPriorities) != null ? _a : [];
+  const weights = priorities.map((p) => typeof p.weight === "number" ? p.weight : null).filter((w) => w != null).sort((a, b) => a - b);
+  const minW = weights[0];
+  const maxW = weights[weights.length - 1];
+  for (const p of priorities) {
+    if (!(p == null ? void 0 : p.value)) continue;
+    const key = String(p.value).toLowerCase();
+    let symbol = NAME_SYMBOLS[key];
+    if (!symbol && typeof p.weight === "number" && minW != null && maxW != null && maxW > minW) {
+      const ratio = (p.weight - minW) / (maxW - minW);
+      const idx = Math.round((1 - ratio) * (SYMBOL_LADDER.length - 1));
+      symbol = SYMBOL_LADDER[idx];
+    }
+    map.set(key, { symbol: symbol != null ? symbol : "", color: p.color });
+  }
+  return map;
+}
+function priorityVisual(priority, map) {
+  var _a;
+  const key = priority.toLowerCase().trim();
+  if (!key) return { symbol: "" };
+  const fromConfig = map.get(key);
+  if (fromConfig) return fromConfig;
+  return { symbol: (_a = NAME_SYMBOLS[key]) != null ? _a : "" };
+}
+
 // src/render.ts
 var GROUP_PALETTE = [
   "var(--color-blue)",
@@ -348,22 +409,15 @@ var GROUP_PALETTE = [
   "var(--color-green)",
   "var(--color-red)"
 ];
-function assignSubprojectColors(groups) {
+function assignDepthColors(groups) {
   var _a;
-  let next = 0;
-  let current;
   for (const group of groups) {
-    const depth = (_a = group.depth) != null ? _a : 0;
-    if (depth === 0) current = void 0;
-    else if (depth === 1) current = GROUP_PALETTE[next++ % GROUP_PALETTE.length];
-    group.color = current;
+    group.color = GROUP_PALETTE[((_a = group.depth) != null ? _a : 0) % GROUP_PALETTE.length];
   }
 }
 var NO_PROJECT = "(no project)";
 var DEFAULT_COLUMNS = [
-  { label: "Task", width: 220, kind: "title", value: (t) => t.title },
-  { label: "Status", width: 110, kind: "status", value: (t) => t.status || "open" },
-  { label: "Priority", width: 80, kind: "text", value: (t) => t.priority }
+  { label: "Task", width: 260, kind: "title", value: (t) => t.title }
 ];
 function formatDate(d) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -421,6 +475,8 @@ function renderGroupedGantt(app, containerEl, groups, opts) {
   const { pxPerDay, columns } = opts;
   const metaWidth = columns.reduce((sum, c) => sum + c.width, 0);
   const today = startOfDay(/* @__PURE__ */ new Date());
+  const statusColors = buildStatusColorMap(app);
+  const priorityMap = buildPriorityMap(app);
   let min = tasks[0].start;
   let max = tasks[0].end;
   for (const t of tasks) {
@@ -469,17 +525,11 @@ function renderGroupedGantt(app, containerEl, groups, opts) {
       groupRow.createDiv({ cls: "tg-timeline" }).style.width = `${timelineWidth}px`;
     }
     for (const task of group.tasks) {
-      renderTaskRow(
-        app,
-        table,
-        task,
-        columns,
-        rangeStart,
-        today,
-        pxPerDay,
-        timelineWidth,
-        group.color
-      );
+      renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth, {
+        depthColor: group.color,
+        statusColors,
+        priorityMap
+      });
     }
   }
 }
@@ -515,14 +565,25 @@ function renderTimeScale(el, rangeStart, totalDays, pxPerDay) {
     }
   }
 }
-function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth, barColor) {
+function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth, visuals) {
   var _a;
   const row = table.createDiv({ cls: "tg-row tg-task" });
+  if (visuals.depthColor) {
+    row.addClass("tg-has-depth");
+    row.style.setProperty("--tg-depth", visuals.depthColor);
+  }
+  const prio = priorityVisual(task.priority, visuals.priorityMap);
   const meta = row.createDiv({ cls: "tg-meta" });
   for (const col of columns) {
     const cell = meta.createDiv({ cls: `tg-cell${col.cls ? " " + col.cls : ""}` });
     cell.style.width = `${col.width}px`;
     if (col.kind === "title") {
+      if (prio.symbol) {
+        const sym = cell.createSpan({ cls: "tg-prio", text: prio.symbol });
+        if (prio.color) sym.style.color = prio.color;
+        sym.setAttr("aria-label", `Priority: ${task.priority}`);
+        sym.setAttr("title", `Priority: ${task.priority}`);
+      }
       const link = cell.createEl("a", { cls: "tg-task-link", text: col.value(task) });
       link.addEventListener("click", (evt) => {
         evt.preventDefault();
@@ -549,15 +610,17 @@ function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, t
   });
   bar.style.left = `${left}px`;
   bar.style.width = `${width}px`;
-  if (barColor) {
+  const statusColor = visuals.statusColors.get(task.status.toLowerCase());
+  if (statusColor) {
     bar.addClass("tg-bar-colored");
-    bar.style.background = barColor;
+    bar.style.background = statusColor;
   }
   bar.setAttr(
     "aria-label",
     `${task.title}
 ${formatDate(task.start)} \u2192 ${formatDate(task.end)}${task.endInferred ? " (end inferred)" : ""}
-Status: ${task.status || "open"}`
+Status: ${task.status || "open"}${task.priority ? `
+Priority: ${task.priority}` : ""}`
   );
   bar.setAttr("title", (_a = bar.getAttr("aria-label")) != null ? _a : "");
   if (width >= 60) {
@@ -704,7 +767,7 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
         this.maxDepth
       ).map((group) => ({ ...group, tasks: group.tasks.filter((t) => this.matchesFilters(t)) }));
       const pruned = pruneEmptyGroups(groups);
-      assignSubprojectColors(pruned);
+      assignDepthColors(pruned);
       renderGroupedGantt(this.app, this.chartEl, pruned, {
         pxPerDay: ZOOM_PX_PER_DAY[this.zoom],
         columns: DEFAULT_COLUMNS,
@@ -755,6 +818,35 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
     this.rootEl = containerEl.createDiv({ cls: "tg-chart tg-bases" });
   }
   onDataUpdated() {
+    const parent = this.parentNote();
+    if (parent) {
+      this.renderParentScoped(parent);
+    } else {
+      this.renderGrouped();
+    }
+  }
+  /** Hierarchical mode: walk the parent note's project tree, filtered by the base. */
+  renderParentScoped(parent) {
+    const allowed = new Set(this.data.data.map((e) => e.file.path));
+    const groups = collectProjectTree(
+      this.app,
+      this.plugin.settings,
+      parent,
+      this.depth()
+    ).map((group) => ({
+      ...group,
+      tasks: group.tasks.filter((t) => allowed.has(t.file.path))
+    }));
+    const pruned = pruneEmptyGroups(groups);
+    assignDepthColors(pruned);
+    renderGroupedGantt(this.app, this.rootEl, pruned, {
+      pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
+      columns: DEFAULT_COLUMNS,
+      emptyText: `No tasks from this base fall under "${parent.basename}". Tasks belong to a project when their 'projects' frontmatter links to it (directly or through a sub-project within the depth limit).`
+    });
+  }
+  /** Flat mode: one group per the base's group-by value. */
+  renderGrouped() {
     const settings = this.plugin.settings;
     const groups = [];
     const entryByPath = /* @__PURE__ */ new Map();
@@ -773,6 +865,20 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
       pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
       columns: this.buildColumns(entryByPath)
     });
+  }
+  parentNote() {
+    const value = this.config.get("parentNote");
+    if (typeof value !== "string" || !value.trim()) return null;
+    const path = value.replace(/^\[\[|\]\]$/g, "").split("|")[0].trim();
+    const direct = this.app.vault.getAbstractFileByPath(path);
+    if (direct instanceof import_obsidian3.TFile) return direct;
+    const resolved = this.app.metadataCache.getFirstLinkpathDest(path, "");
+    return resolved instanceof import_obsidian3.TFile ? resolved : null;
+  }
+  depth() {
+    const value = Number(this.config.get("depth"));
+    if (Number.isFinite(value) && value >= 1) return Math.min(value, 6);
+    return this.plugin.settings.maxDepth;
   }
   zoom() {
     const value = this.config.get("zoom");
@@ -811,6 +917,20 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
 };
 function ganttBasesOptions() {
   return [
+    {
+      type: "file",
+      key: "parentNote",
+      displayName: "Parent note",
+      placeholder: "Optional \u2014 scope to a project tree",
+      filter: (file) => file.extension === "md"
+    },
+    {
+      type: "dropdown",
+      key: "depth",
+      displayName: "Sub-project depth",
+      default: "3",
+      options: { "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6" }
+    },
     {
       type: "dropdown",
       key: "zoom",
