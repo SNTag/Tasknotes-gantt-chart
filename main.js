@@ -1041,7 +1041,8 @@ var TasknotesGanttPlugin = class extends import_obsidian4.Plugin {
       await leaf.setViewState({ type: VIEW_TYPE_TASKNOTES_GANTT, active: true });
     }
     if (!leaf) return null;
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
+    this.app.workspace.setActiveLeaf(leaf, { focus: true });
     return leaf.view instanceof TasknotesGanttView ? leaf.view : null;
   }
   async loadSettings() {

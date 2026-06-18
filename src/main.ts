@@ -111,7 +111,10 @@ export default class TasknotesGanttPlugin extends Plugin {
 			await leaf.setViewState({ type: VIEW_TYPE_TASKNOTES_GANTT, active: true });
 		}
 		if (!leaf) return null;
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
+		// Focus the leaf so keyboard shortcuts (e.g. Ctrl+W) act on this tab,
+		// not the note the view was opened from.
+		this.app.workspace.setActiveLeaf(leaf, { focus: true });
 		return leaf.view instanceof TasknotesGanttView ? leaf.view : null;
 	}
 
