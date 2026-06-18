@@ -20,10 +20,19 @@ interface PriorityConfig {
 	weight?: number;
 }
 
+/**
+ * Minimal typed view of the (undocumented) plugin registry, used only to read
+ * another installed plugin's settings without resorting to an `any` cast.
+ */
+interface PluginRegistry {
+	plugins?: Record<string, { settings?: Record<string, unknown> } | undefined>;
+}
+
 function tasknotesSettings(app: App): Record<string, unknown> | null {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const plugins = (app as any).plugins?.plugins;
-	const tn = plugins?.tasknotes;
+	// `app.plugins` is not part of the public API; access it through a narrow
+	// typed view so the chart can mirror the user's TaskNotes color config.
+	const registry = (app as App & { plugins?: PluginRegistry }).plugins;
+	const tn = registry?.plugins?.tasknotes;
 	return tn?.settings ?? null;
 }
 

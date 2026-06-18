@@ -1,7 +1,7 @@
 {
 	"name": "tasknotes-gantt",
 	"version": "0.9.0",
-	"description": "Obsidian plugin that generates a Gantt chart in a database view format from TaskNotes-style frontmatter.",
+	"description": "Generate Gantt charts from TaskNotes-style notes, with recursive project scoping and inline task support.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
