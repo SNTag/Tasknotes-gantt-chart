@@ -23,6 +23,8 @@ export interface TasknotesGanttSettings {
 	maxDepth: number;
 	/** Include tasks whose status is done/cancelled. */
 	showCompleted: boolean;
+	/** In the parent-scoped view, also pull inline checkbox tasks from note bodies. */
+	includeInlineTasks: boolean;
 }
 
 export type ZoomLevel = "day" | "week" | "month";
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: TasknotesGanttSettings = {
 	groupByProject: true,
 	maxDepth: 3,
 	showCompleted: true,
+	includeInlineTasks: true,
 };
 
 export function splitFieldList(value: string): string[] {

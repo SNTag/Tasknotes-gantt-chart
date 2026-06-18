@@ -47,7 +47,8 @@ var DEFAULT_SETTINGS = {
   defaultZoom: "week",
   groupByProject: true,
   maxDepth: 3,
-  showCompleted: true
+  showCompleted: true,
+  includeInlineTasks: true
 };
 function splitFieldList(value) {
   return value.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
@@ -133,6 +134,14 @@ var TasknotesGanttSettingTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(containerEl).setName("Show completed tasks").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.showCompleted).onChange(async (value) => {
         this.plugin.settings.showCompleted = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("Include inline checkbox tasks").setDesc(
+      "In the parent-scoped view, also chart inline '- [ ]' tasks found in note bodies. Dates use Dataview inline fields (e.g. [scheduled:: 2026-06-20] [due:: 2026-06-25]); only tasks with a scheduled/start date are shown."
+    ).addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.includeInlineTasks).onChange(async (value) => {
+        this.plugin.settings.includeInlineTasks = value;
         await this.plugin.saveSettings();
       })
     );
@@ -287,6 +296,9 @@ function collectProjectParents(app) {
   return parents;
 }
 function collectProjectTree(app, settings, parent, maxDepth) {
+  return pruneEmptyGroups(collectProjectTreeRaw(app, settings, parent, maxDepth));
+}
+function collectProjectTreeRaw(app, settings, parent, maxDepth) {
   const childrenOf = buildProjectChildrenIndex(app);
   const groups = [];
   const expanded = /* @__PURE__ */ new Set();
@@ -318,7 +330,98 @@ function collectProjectTree(app, settings, parent, maxDepth) {
     for (const sub of subProjects) walk(sub, depth + 1);
   };
   walk(parent, 0);
-  return pruneEmptyGroups(groups);
+  return groups;
+}
+function statusFromCheckbox(ch) {
+  switch (ch) {
+    case " ":
+      return { status: "open", kind: "open" };
+    case "/":
+      return { status: "in-progress", kind: "in-progress" };
+    case "-":
+      return { status: "cancelled", kind: "cancelled" };
+    default:
+      return { status: "done", kind: "done" };
+  }
+}
+function parseDataviewFields(line) {
+  const out = {};
+  const re = /[[(]([^[\]()]+?)::\s*([^[\]()]*?)[\])]/g;
+  let m;
+  while ((m = re.exec(line)) !== null) {
+    out[m[1].trim().toLowerCase()] = m[2].trim();
+  }
+  return out;
+}
+function inlineTaskTitle(line) {
+  return line.replace(/^\s*[-*+]\s+\[.\]\s*/, "").replace(/[[(][^[\]()]+?::\s*[^[\]()]*?[\])]/g, "").replace(/\s{2,}/g, " ").trim();
+}
+async function collectInlineTasksFromFile(app, settings, file) {
+  var _a, _b, _c, _d, _e;
+  const items = (_a = app.metadataCache.getFileCache(file)) == null ? void 0 : _a.listItems;
+  if (!items) return [];
+  const taskItems = items.filter((i) => i.task !== void 0);
+  if (taskItems.length === 0) return [];
+  const content = await app.vault.cachedRead(file);
+  const lines = content.split("\n");
+  const startFields = splitFieldList(settings.startFields).map((f) => f.toLowerCase());
+  const endFields = splitFieldList(settings.endFields).map((f) => f.toLowerCase());
+  const completedFields = splitFieldList(settings.completedFields).map((f) => f.toLowerCase());
+  const today = startOfDay(/* @__PURE__ */ new Date());
+  const out = [];
+  for (const item of taskItems) {
+    const lineNo = item.position.start.line;
+    const raw = (_b = lines[lineNo]) != null ? _b : "";
+    const fields = parseDataviewFields(raw);
+    const start = parseDate(firstField(fields, startFields));
+    if (!start) continue;
+    let { status, kind } = statusFromCheckbox((_c = item.task) != null ? _c : " ");
+    if (fields["status"]) {
+      status = fields["status"];
+      kind = classifyStatus(status, settings);
+    }
+    let end = parseDate(firstField(fields, endFields));
+    let endInferred = false;
+    if (!end) {
+      endInferred = true;
+      end = kind === "done" || kind === "cancelled" ? (_d = parseDate(firstField(fields, completedFields))) != null ? _d : start : today;
+    }
+    if (end < start) end = start;
+    out.push({
+      file,
+      title: inlineTaskTitle(raw) || "(untitled task)",
+      status,
+      statusKind: kind,
+      priority: (_e = fields["priority"]) != null ? _e : "",
+      projects: [],
+      start,
+      end,
+      endInferred,
+      kind: "inline",
+      line: lineNo,
+      indent: 1
+    });
+  }
+  return out;
+}
+async function augmentGroupsWithInlineTasks(app, settings, groups) {
+  const scanned = /* @__PURE__ */ new Set();
+  const inlineFor = async (file) => {
+    if (scanned.has(file.path)) return [];
+    scanned.add(file.path);
+    return collectInlineTasksFromFile(app, settings, file);
+  };
+  const result = [];
+  for (const group of groups) {
+    const tasks = [];
+    if (group.file) tasks.push(...await inlineFor(group.file));
+    for (const task of group.tasks) {
+      tasks.push(task);
+      tasks.push(...await inlineFor(task.file));
+    }
+    result.push({ ...group, tasks });
+  }
+  return result;
 }
 function pruneEmptyGroups(groups) {
   const keep = new Array(groups.length).fill(false);
@@ -572,12 +675,25 @@ function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, t
     row.addClass("tg-has-depth");
     row.style.setProperty("--tg-depth", visuals.depthColor);
   }
+  if (task.kind === "inline") row.addClass("tg-inline");
   const prio = priorityVisual(task.priority, visuals.priorityMap);
+  const openTask = (evt) => {
+    const mod = evt.ctrlKey || evt.metaKey;
+    if (task.kind === "inline" && task.line != null) {
+      void app.workspace.getLeaf(mod).openFile(task.file, { eState: { line: task.line } });
+    } else {
+      app.workspace.openLinkText(task.file.path, "", mod);
+    }
+  };
   const meta = row.createDiv({ cls: "tg-meta" });
   for (const col of columns) {
     const cell = meta.createDiv({ cls: `tg-cell${col.cls ? " " + col.cls : ""}` });
     cell.style.width = `${col.width}px`;
     if (col.kind === "title") {
+      if (task.indent) cell.style.paddingLeft = `${8 + task.indent * 16}px`;
+      if (task.kind === "inline") {
+        cell.createSpan({ cls: "tg-checkbox", text: checkboxGlyph(task.statusKind) });
+      }
       if (prio.symbol) {
         const sym = cell.createSpan({ cls: "tg-prio", text: prio.symbol });
         if (prio.color) sym.style.color = prio.color;
@@ -587,7 +703,7 @@ function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, t
       const link = cell.createEl("a", { cls: "tg-task-link", text: col.value(task) });
       link.addEventListener("click", (evt) => {
         evt.preventDefault();
-        app.workspace.openLinkText(task.file.path, "", evt.ctrlKey || evt.metaKey);
+        openTask(evt);
       });
     } else if (col.kind === "status") {
       cell.createSpan({
@@ -626,9 +742,19 @@ Priority: ${task.priority}` : ""}`
   if (width >= 60) {
     bar.createSpan({ cls: "tg-bar-label", text: task.title });
   }
-  bar.addEventListener("click", (evt) => {
-    app.workspace.openLinkText(task.file.path, "", evt.ctrlKey || evt.metaKey);
-  });
+  bar.addEventListener("click", openTask);
+}
+function checkboxGlyph(kind) {
+  switch (kind) {
+    case "done":
+      return "\u2611";
+    case "cancelled":
+      return "\u2612";
+    case "in-progress":
+      return "\u25D0";
+    default:
+      return "\u2610";
+  }
 }
 
 // src/view.ts
@@ -641,11 +767,13 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
     this.depthSelectEl = null;
     this.filterText = "";
     this.parentFile = null;
+    this.refreshToken = 0;
     this.plugin = plugin;
     this.zoom = plugin.settings.defaultZoom;
     this.groupByProject = plugin.settings.groupByProject;
     this.showCompleted = plugin.settings.showCompleted;
     this.maxDepth = plugin.settings.maxDepth;
+    this.includeInlineTasks = plugin.settings.includeInlineTasks;
   }
   getViewType() {
     return VIEW_TYPE_TASKNOTES_GANTT;
@@ -729,6 +857,12 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
       this.refresh();
     });
     doneToggle.addClass("tg-toolbar-toggle");
+    const inlineToggle = this.makeToggle(bar, "Inline tasks", this.includeInlineTasks, (v) => {
+      this.includeInlineTasks = v;
+      this.refresh();
+    });
+    inlineToggle.addClass("tg-toolbar-toggle");
+    inlineToggle.setAttr("aria-label", "Include inline checkbox tasks (parent-scoped view)");
     const refreshBtn = bar.createEl("button", { text: "Refresh", cls: "tg-refresh" });
     refreshBtn.addEventListener("click", () => this.refresh());
   }
@@ -766,19 +900,7 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
   refresh() {
     if (!this.chartEl) return;
     if (this.parentFile) {
-      const groups = collectProjectTree(
-        this.app,
-        this.plugin.settings,
-        this.parentFile,
-        this.maxDepth
-      ).map((group) => ({ ...group, tasks: group.tasks.filter((t) => this.matchesFilters(t)) }));
-      const pruned = pruneEmptyGroups(groups);
-      assignDepthColors(pruned);
-      renderGroupedGantt(this.app, this.chartEl, pruned, {
-        pxPerDay: ZOOM_PX_PER_DAY[this.zoom],
-        columns: DEFAULT_COLUMNS,
-        emptyText: `No tasks found under "${this.parentFile.basename}". Tasks belong to a project when their 'projects' frontmatter links to it (directly or through a sub-project within the depth limit).`
-      });
+      void this.refreshParent(this.parentFile);
       return;
     }
     const tasks = collectTasks(this.app, this.plugin.settings);
@@ -787,6 +909,26 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
       groupByProject: this.groupByProject,
       showCompleted: this.showCompleted,
       filterText: this.filterText
+    });
+  }
+  /** Parent-scoped render. Async because inline tasks read note bodies. */
+  async refreshParent(parentFile) {
+    const token = ++this.refreshToken;
+    let groups = collectProjectTreeRaw(this.app, this.plugin.settings, parentFile, this.maxDepth);
+    if (this.includeInlineTasks) {
+      groups = await augmentGroupsWithInlineTasks(this.app, this.plugin.settings, groups);
+    }
+    if (token !== this.refreshToken || !this.chartEl) return;
+    const filtered = groups.map((group) => ({
+      ...group,
+      tasks: group.tasks.filter((t) => this.matchesFilters(t))
+    }));
+    const pruned = pruneEmptyGroups(filtered);
+    assignDepthColors(pruned);
+    renderGroupedGantt(this.app, this.chartEl, pruned, {
+      pxPerDay: ZOOM_PX_PER_DAY[this.zoom],
+      columns: DEFAULT_COLUMNS,
+      emptyText: `No tasks found under "${parentFile.basename}". Tasks belong to a project when their 'projects' frontmatter links to it (directly or through a sub-project within the depth limit).`
     });
   }
   async onClose() {

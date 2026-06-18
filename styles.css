@@ -246,6 +246,23 @@
 	flex: 0 0 auto;
 }
 
+/* Inline checkbox tasks pulled from note bodies. */
+.tg-checkbox {
+	margin-right: 5px;
+	font-size: 12px;
+	color: var(--text-muted);
+	flex: 0 0 auto;
+}
+
+.tg-task.tg-inline .tg-task-link {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.tg-task.tg-inline .tg-task-link:hover {
+	color: var(--text-accent);
+}
+
 .tg-task-link {
 	cursor: pointer;
 	color: var(--text-normal);

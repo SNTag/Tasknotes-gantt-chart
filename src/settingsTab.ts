@@ -150,5 +150,19 @@ export class TasknotesGanttSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 			);
+
+		new Setting(containerEl)
+			.setName("Include inline checkbox tasks")
+			.setDesc(
+				"In the parent-scoped view, also chart inline '- [ ]' tasks found in note bodies. " +
+					"Dates use Dataview inline fields (e.g. [scheduled:: 2026-06-20] [due:: 2026-06-25]); " +
+					"only tasks with a scheduled/start date are shown."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.includeInlineTasks).onChange(async (value) => {
+					this.plugin.settings.includeInlineTasks = value;
+					await this.plugin.saveSettings();
+				})
+			);
 	}
 }

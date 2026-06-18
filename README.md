@@ -44,6 +44,20 @@ You can point the chart at one parent note (e.g. `Example Project Overview`) and
 
 Note that membership follows the TaskNotes model: a note is a child of a project when its **`projects` frontmatter** links to it. Plain `[[wikilinks]]` in a note's body do not create hierarchy edges.
 
+### Inline checkbox tasks
+
+In the parent-scoped view, the chart also pulls **inline checkbox tasks** (`- [ ] …`) out of the bodies of the notes in the tree, and shows them indented under the note they belong to (with a ☐/☑/☒/◐ marker for their checkbox state). Clicking one opens the note at that line.
+
+- Dates come from **Dataview inline fields** on the task line, using the same field names as the date settings, e.g.:
+
+  ```markdown
+  - [ ] Draft the intro [scheduled:: 2026-06-20] [due:: 2026-06-25] [priority:: high]
+  ```
+
+- An inline task is only charted if it has a **scheduled/start** date (`[scheduled:: …]` or `[start:: …]`). If it has no end (`[due:: …]`), the bar runs to today, or to `[completed:: …]` for a done/cancelled checkbox.
+- Status comes from the checkbox character (`[ ]` open, `[x]` done, `[/]` in progress, `[-]` cancelled), or from a `[status:: …]` field if present.
+- Toggle this with **"Inline tasks"** in the toolbar, or **Include inline checkbox tasks** in settings. Only notes in the current parent tree are scanned (it reads their bodies, unlike the frontmatter-only note scan).
+
 ### Linking to a pre-scoped chart from a note
 
 You can put a clickable link in any note that opens the standalone Gantt view already scoped to a parent project, using an Obsidian URI:

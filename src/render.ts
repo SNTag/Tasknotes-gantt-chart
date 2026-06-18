@@ -278,14 +278,29 @@ function renderTaskRow(
 		row.addClass("tg-has-depth");
 		row.style.setProperty("--tg-depth", visuals.depthColor);
 	}
+	if (task.kind === "inline") row.addClass("tg-inline");
 
 	const prio = priorityVisual(task.priority, visuals.priorityMap);
+
+	// Open the note — at the task's line for inline checkbox tasks.
+	const openTask = (evt: MouseEvent): void => {
+		const mod = evt.ctrlKey || evt.metaKey;
+		if (task.kind === "inline" && task.line != null) {
+			void app.workspace.getLeaf(mod).openFile(task.file, { eState: { line: task.line } });
+		} else {
+			app.workspace.openLinkText(task.file.path, "", mod);
+		}
+	};
 
 	const meta = row.createDiv({ cls: "tg-meta" });
 	for (const col of columns) {
 		const cell = meta.createDiv({ cls: `tg-cell${col.cls ? " " + col.cls : ""}` });
 		cell.style.width = `${col.width}px`;
 		if (col.kind === "title") {
+			if (task.indent) cell.style.paddingLeft = `${8 + task.indent * 16}px`;
+			if (task.kind === "inline") {
+				cell.createSpan({ cls: "tg-checkbox", text: checkboxGlyph(task.statusKind) });
+			}
 			if (prio.symbol) {
 				const sym = cell.createSpan({ cls: "tg-prio", text: prio.symbol });
 				if (prio.color) sym.style.color = prio.color;
@@ -295,7 +310,7 @@ function renderTaskRow(
 			const link = cell.createEl("a", { cls: "tg-task-link", text: col.value(task) });
 			link.addEventListener("click", (evt) => {
 				evt.preventDefault();
-				app.workspace.openLinkText(task.file.path, "", evt.ctrlKey || evt.metaKey);
+				openTask(evt);
 			});
 		} else if (col.kind === "status") {
 			cell.createSpan({
@@ -343,7 +358,19 @@ function renderTaskRow(
 	if (width >= 60) {
 		bar.createSpan({ cls: "tg-bar-label", text: task.title });
 	}
-	bar.addEventListener("click", (evt) => {
-		app.workspace.openLinkText(task.file.path, "", evt.ctrlKey || evt.metaKey);
-	});
+	bar.addEventListener("click", openTask);
+}
+
+/** Glyph showing an inline task's checkbox state. */
+function checkboxGlyph(kind: GanttTask["statusKind"]): string {
+	switch (kind) {
+		case "done":
+			return "☑";
+		case "cancelled":
+			return "☒";
+		case "in-progress":
+			return "◐";
+		default:
+			return "☐";
+	}
 }

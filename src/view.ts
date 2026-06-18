@@ -2,7 +2,14 @@ import { FuzzySuggestModal, ItemView, TFile, WorkspaceLeaf, debounce } from "obs
 import type { App } from "obsidian";
 import type TasknotesGanttPlugin from "./main";
 import { ZOOM_PX_PER_DAY, ZoomLevel } from "./settings";
-import { GanttTask, collectProjectParents, collectProjectTree, collectTasks, pruneEmptyGroups } from "./tasks";
+import {
+	GanttTask,
+	augmentGroupsWithInlineTasks,
+	collectProjectParents,
+	collectProjectTreeRaw,
+	collectTasks,
+	pruneEmptyGroups,
+} from "./tasks";
 import { DEFAULT_COLUMNS, assignDepthColors, renderGantt, renderGroupedGantt } from "./render";
 
 export const VIEW_TYPE_TASKNOTES_GANTT = "tasknotes-gantt-view";
@@ -18,6 +25,8 @@ export class TasknotesGanttView extends ItemView {
 	private filterText = "";
 	private parentFile: TFile | null = null;
 	private maxDepth: number;
+	private includeInlineTasks: boolean;
+	private refreshToken = 0;
 
 	constructor(leaf: WorkspaceLeaf, plugin: TasknotesGanttPlugin) {
 		super(leaf);
@@ -26,6 +35,7 @@ export class TasknotesGanttView extends ItemView {
 		this.groupByProject = plugin.settings.groupByProject;
 		this.showCompleted = plugin.settings.showCompleted;
 		this.maxDepth = plugin.settings.maxDepth;
+		this.includeInlineTasks = plugin.settings.includeInlineTasks;
 	}
 
 	getViewType(): string {
@@ -123,6 +133,13 @@ export class TasknotesGanttView extends ItemView {
 		});
 		doneToggle.addClass("tg-toolbar-toggle");
 
+		const inlineToggle = this.makeToggle(bar, "Inline tasks", this.includeInlineTasks, (v) => {
+			this.includeInlineTasks = v;
+			this.refresh();
+		});
+		inlineToggle.addClass("tg-toolbar-toggle");
+		inlineToggle.setAttr("aria-label", "Include inline checkbox tasks (parent-scoped view)");
+
 		const refreshBtn = bar.createEl("button", { text: "Refresh", cls: "tg-refresh" });
 		refreshBtn.addEventListener("click", () => this.refresh());
 	}
@@ -177,19 +194,7 @@ export class TasknotesGanttView extends ItemView {
 		if (!this.chartEl) return;
 
 		if (this.parentFile) {
-			const groups = collectProjectTree(
-				this.app,
-				this.plugin.settings,
-				this.parentFile,
-				this.maxDepth
-			).map((group) => ({ ...group, tasks: group.tasks.filter((t) => this.matchesFilters(t)) }));
-			const pruned = pruneEmptyGroups(groups);
-			assignDepthColors(pruned);
-			renderGroupedGantt(this.app, this.chartEl, pruned, {
-				pxPerDay: ZOOM_PX_PER_DAY[this.zoom],
-				columns: DEFAULT_COLUMNS,
-				emptyText: `No tasks found under "${this.parentFile.basename}". Tasks belong to a project when their 'projects' frontmatter links to it (directly or through a sub-project within the depth limit).`,
-			});
+			void this.refreshParent(this.parentFile);
 			return;
 		}
 
@@ -199,6 +204,29 @@ export class TasknotesGanttView extends ItemView {
 			groupByProject: this.groupByProject,
 			showCompleted: this.showCompleted,
 			filterText: this.filterText,
+		});
+	}
+
+	/** Parent-scoped render. Async because inline tasks read note bodies. */
+	private async refreshParent(parentFile: TFile): Promise<void> {
+		const token = ++this.refreshToken;
+		let groups = collectProjectTreeRaw(this.app, this.plugin.settings, parentFile, this.maxDepth);
+		if (this.includeInlineTasks) {
+			groups = await augmentGroupsWithInlineTasks(this.app, this.plugin.settings, groups);
+		}
+		// A newer refresh started (or the view closed) while we were reading bodies.
+		if (token !== this.refreshToken || !this.chartEl) return;
+
+		const filtered = groups.map((group) => ({
+			...group,
+			tasks: group.tasks.filter((t) => this.matchesFilters(t)),
+		}));
+		const pruned = pruneEmptyGroups(filtered);
+		assignDepthColors(pruned);
+		renderGroupedGantt(this.app, this.chartEl, pruned, {
+			pxPerDay: ZOOM_PX_PER_DAY[this.zoom],
+			columns: DEFAULT_COLUMNS,
+			emptyText: `No tasks found under "${parentFile.basename}". Tasks belong to a project when their 'projects' frontmatter links to it (directly or through a sub-project within the depth limit).`,
 		});
 	}
 

@@ -14,6 +14,12 @@ export interface GanttTask {
 	end: Date;
 	/** True when the end date was inferred (e.g. "today" for unfinished tasks). */
 	endInferred: boolean;
+	/** "note" = whole-note task (frontmatter); "inline" = checkbox task in a note body. */
+	kind?: "note" | "inline";
+	/** Body line of an inline task, so clicking opens the note at that line. */
+	line?: number;
+	/** Extra nesting level for rendering (inline tasks sit under their source note). */
+	indent?: number;
 }
 
 export function startOfDay(d: Date): Date {
@@ -212,6 +218,20 @@ export function collectProjectTree(
 	parent: TFile,
 	maxDepth: number
 ): ProjectGroup[] {
+	return pruneEmptyGroups(collectProjectTreeRaw(app, settings, parent, maxDepth));
+}
+
+/**
+ * Same as collectProjectTree but without pruning empty groups, so callers that
+ * add inline tasks afterwards (which can populate otherwise-empty project notes)
+ * can prune once at the end.
+ */
+export function collectProjectTreeRaw(
+	app: App,
+	settings: TasknotesGanttSettings,
+	parent: TFile,
+	maxDepth: number
+): ProjectGroup[] {
 	const childrenOf = buildProjectChildrenIndex(app);
 	const groups: ProjectGroup[] = [];
 	const expanded = new Set<string>();
@@ -245,7 +265,138 @@ export function collectProjectTree(
 	};
 
 	walk(parent, 0);
-	return pruneEmptyGroups(groups);
+	return groups;
+}
+
+/** Map a checkbox character to a status string + kind. */
+function statusFromCheckbox(ch: string): { status: string; kind: StatusKind } {
+	switch (ch) {
+		case " ":
+			return { status: "open", kind: "open" };
+		case "/":
+			return { status: "in-progress", kind: "in-progress" };
+		case "-":
+			return { status: "cancelled", kind: "cancelled" };
+		default:
+			// Per Obsidian, any non-space character marks a completed task.
+			return { status: "done", kind: "done" };
+	}
+}
+
+/** Extract Dataview inline fields ([key:: value] or (key:: value)) from a line. */
+export function parseDataviewFields(line: string): Record<string, string> {
+	const out: Record<string, string> = {};
+	const re = /[[(]([^[\]()]+?)::\s*([^[\]()]*?)[\])]/g;
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(line)) !== null) {
+		out[m[1].trim().toLowerCase()] = m[2].trim();
+	}
+	return out;
+}
+
+/** Strip the checkbox marker and Dataview fields to get a clean task title. */
+function inlineTaskTitle(line: string): string {
+	return line
+		.replace(/^\s*[-*+]\s+\[.\]\s*/, "")
+		.replace(/[[(][^[\]()]+?::\s*[^[\]()]*?[\])]/g, "")
+		.replace(/\s{2,}/g, " ")
+		.trim();
+}
+
+/**
+ * Parse inline checkbox tasks ("- [ ] …") from a note body. Dates come from
+ * Dataview inline fields, reusing the configured field names as Dataview keys.
+ * An inline task is only returned when it has a scheduled/start date.
+ */
+export async function collectInlineTasksFromFile(
+	app: App,
+	settings: TasknotesGanttSettings,
+	file: TFile
+): Promise<GanttTask[]> {
+	const items = app.metadataCache.getFileCache(file)?.listItems;
+	if (!items) return [];
+	const taskItems = items.filter((i) => i.task !== undefined);
+	if (taskItems.length === 0) return [];
+
+	const content = await app.vault.cachedRead(file);
+	const lines = content.split("\n");
+	const startFields = splitFieldList(settings.startFields).map((f) => f.toLowerCase());
+	const endFields = splitFieldList(settings.endFields).map((f) => f.toLowerCase());
+	const completedFields = splitFieldList(settings.completedFields).map((f) => f.toLowerCase());
+	const today = startOfDay(new Date());
+
+	const out: GanttTask[] = [];
+	for (const item of taskItems) {
+		const lineNo = item.position.start.line;
+		const raw = lines[lineNo] ?? "";
+		const fields = parseDataviewFields(raw);
+
+		const start = parseDate(firstField(fields, startFields));
+		if (!start) continue; // Require a scheduled/start date.
+
+		let { status, kind } = statusFromCheckbox(item.task ?? " ");
+		if (fields["status"]) {
+			status = fields["status"];
+			kind = classifyStatus(status, settings);
+		}
+
+		let end = parseDate(firstField(fields, endFields));
+		let endInferred = false;
+		if (!end) {
+			endInferred = true;
+			end =
+				kind === "done" || kind === "cancelled"
+					? parseDate(firstField(fields, completedFields)) ?? start
+					: today;
+		}
+		if (end < start) end = start;
+
+		out.push({
+			file,
+			title: inlineTaskTitle(raw) || "(untitled task)",
+			status,
+			statusKind: kind,
+			priority: fields["priority"] ?? "",
+			projects: [],
+			start,
+			end,
+			endInferred,
+			kind: "inline",
+			line: lineNo,
+			indent: 1,
+		});
+	}
+	return out;
+}
+
+/**
+ * Add each note's inline checkbox tasks as rows under that note: the group's
+ * own (overview) note first, then each note-task row's inline children right
+ * after it. Each note is scanned at most once.
+ */
+export async function augmentGroupsWithInlineTasks(
+	app: App,
+	settings: TasknotesGanttSettings,
+	groups: ProjectGroup[]
+): Promise<ProjectGroup[]> {
+	const scanned = new Set<string>();
+	const inlineFor = async (file: TFile): Promise<GanttTask[]> => {
+		if (scanned.has(file.path)) return [];
+		scanned.add(file.path);
+		return collectInlineTasksFromFile(app, settings, file);
+	};
+
+	const result: ProjectGroup[] = [];
+	for (const group of groups) {
+		const tasks: GanttTask[] = [];
+		if (group.file) tasks.push(...(await inlineFor(group.file)));
+		for (const task of group.tasks) {
+			tasks.push(task);
+			tasks.push(...(await inlineFor(task.file)));
+		}
+		result.push({ ...group, tasks });
+	}
+	return result;
 }
 
 /** Drop projects that contain no tasks anywhere in their subtree. */
