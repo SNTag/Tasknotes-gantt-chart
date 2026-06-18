@@ -1,1 +1,153 @@
-# Tasknotes-gantt-chart
+# TaskNotes Gantt Chart
+
+An Obsidian plugin that generates a **Gantt chart in a database view format** from your [TaskNotes](https://github.com/callumalpass/tasknotes)-style notes (one note per task, metadata in YAML frontmatter).
+
+Each task row shows database columns (task, status, priority) pinned on the left, with a scrollable timeline of Gantt bars on the right. Tasks are grouped by their linked project.
+
+## How it works
+
+The plugin scans your vault for notes tagged with your task tag (default: `task`) and reads frontmatter like:
+
+```yaml
+---
+title: Draft project proposal
+date created: 2026-06-04T14:31:03-04:00
+date modified: 2026-06-04T17:16:55-04:00
+tags:
+  - task
+status: in-progress
+priority: ""
+projects:
+  - "[[Notes/Example Project/Example Project Overview]]"
+---
+```
+
+For each task it determines:
+
+| Bar | Field(s) used (first match wins, configurable in settings) |
+| --- | --- |
+| **Start** | `scheduled`, `start`, `startDate` → falls back to `date created` / `dateCreated` |
+| **End** | `due`, `end`, `endDate`, `deadline` → for done tasks falls back to `completedDate` / `date modified`; for open tasks the bar runs to **today** (drawn with a dashed edge to show the end is inferred) |
+| **Group** | first entry in `projects` (wikilinks are resolved to a display name, e.g. `Example Project Overview`) |
+| **Bar color** | `status` — using the **exact color you configured in TaskNotes** (read from its `customStatuses`); falls back to built-in colors if TaskNotes isn't installed. Overdue tasks get a red outline |
+| **Priority** | shown as a symbol before the task name (⏫ / 🔺 / 🔸 / 🔻 / ⏬), tinted with the TaskNotes priority color |
+| **Row tint** | nesting depth in a parent-scoped tree (each level a distinct color) |
+
+## Scoping to a parent project (recursive)
+
+You can point the chart at one parent note (e.g. `Example Project Overview`) and it will chart that project's whole subtree:
+
+- Click **Parent note…** in the Gantt view toolbar and pick the note (the picker lists every note that is referenced as a project), or open the parent note and run the command **"Open Gantt chart for current note (as parent project)"**.
+- The chart then walks the hierarchy recursively: tasks whose `projects` frontmatter links to the parent, sub-project notes that link to it, those sub-projects' tasks, and so on — down to the **Depth** selected in the toolbar (1–6, default in settings).
+- Each project becomes an indented, clickable section header; tasks appear under the nearest project that links them. **Each task row is tinted by its nesting depth** (depth 0, 1, 2… each a distinct color, also shown as the section-header dot), while **each task bar is colored by its status** (TaskNotes colors) and shows a **priority symbol** before its name. Projects with no tasks anywhere in their subtree are hidden. Cycles and duplicates are handled (a task is only listed once).
+- Click ✕ on the parent chip to go back to charting all tasks.
+
+Note that membership follows the TaskNotes model: a note is a child of a project when its **`projects` frontmatter** links to it. Plain `[[wikilinks]]` in a note's body do not create hierarchy edges.
+
+### Inline checkbox tasks
+
+In the parent-scoped view, the chart also pulls **inline checkbox tasks** (`- [ ] …`) out of the bodies of the notes in the tree, and shows them indented under the note they belong to (with a ☐/☑/☒/◐ marker for their checkbox state). Clicking one opens the note at that line.
+
+- Dates come from **Dataview inline fields** on the task line, using the same field names as the date settings, e.g.:
+
+  ```markdown
+  - [ ] Draft the intro [scheduled:: 2026-06-20] [due:: 2026-06-25] [priority:: high]
+  ```
+
+- An inline task is only charted if it has a **scheduled/start** date (`[scheduled:: …]` or `[start:: …]`). If it has no end (`[due:: …]`), the bar runs to today, or to `[completed:: …]` for a done/cancelled checkbox.
+- Status comes from the checkbox character (`[ ]` open, `[x]` done, `[/]` in progress, `[-]` cancelled), or from a `[status:: …]` field if present.
+- Toggle this with **"Inline tasks"** in the toolbar, or **Include inline checkbox tasks** in settings. Only notes in the current parent tree are scanned (it reads their bodies, unlike the frontmatter-only note scan).
+
+### Linking to a pre-scoped chart from a note
+
+You can put a clickable link in any note that opens the standalone Gantt view already scoped to a parent project, using an Obsidian URI:
+
+```markdown
+[Everyday plan](obsidian://tasknotes-gantt?parent=Everyday)
+[Everyday plan, 2 levels deep](obsidian://tasknotes-gantt?parent=Everyday&depth=2)
+[Gantt for this note](obsidian://tasknotes-gantt)
+```
+
+- `parent` is the note name (or full path); it's resolved the same way a `[[wikilink]]` is. URL-encode spaces, e.g. `parent=Daily%20Plan`. **If you omit `parent` entirely, the note you clicked the link from becomes the parent** — so the same bare link can be reused in any project note.
+- `depth` (optional, 1–6) sets the sub-project depth; if omitted, the toolbar/settings default is used.
+- If you have more than one vault, add `&vault=YourVaultName`.
+
+To avoid hand-writing the link, open the note you want as the parent and run the command **"Copy Gantt chart link for current note (as parent project)"** — it copies a ready-to-paste `obsidian://` link (including the vault name) to your clipboard.
+
+## Using it as a Bases layout (database view)
+
+On Obsidian 1.10+ the plugin registers a **"TaskNotes Gantt"** layout for [Bases](https://help.obsidian.md/bases), so it appears in the same Layout dropdown as Table, Cards, and the TaskNotes layouts:
+
+1. Create or open a base (e.g. the one TaskNotes generates), or insert one in a note.
+2. Open **Configure view → Layout** and pick **TaskNotes Gantt**.
+3. The base drives everything database-style:
+   - **Filters** decide which notes are charted (the task tag is not required here — your base's filters are trusted).
+   - **Group by** (e.g. `projects`) becomes the row groups.
+   - **Properties** (visible columns) become the table columns on the left.
+   - **Sort** controls row order; a **Zoom** option (Day/Week/Month) is in the view options.
+
+### Assigning a parent note and depth in the database view
+
+The Bases layout has two **view options** (open the layout's options menu, the same place as Zoom):
+
+- **Parent note** — pick a note to scope the chart to that project's recursive subtree. When set, it overrides the base's group-by and instead walks the `projects` hierarchy (rows tinted by depth, just like the standalone view), while still honoring the base's **filters** (only notes that pass the base's filters appear).
+- **Sub-project depth** — how many levels of sub-projects to follow below the parent (1–6). Leave **Parent note** empty to go back to plain group-by behavior.
+
+Dates for the bars are still resolved from frontmatter using the field mappings in the plugin settings (`scheduled`/`due` with created/modified fallbacks).
+
+## Features
+
+- **Database view layout** — a sticky Task column plus timeline bars, grouped by project. Status, priority, and the start/end dates are encoded visually (bar color, priority symbol, hover tooltip) rather than as extra columns.
+- **Toolbar** — text filter, Day/Week/Month zoom, group-by-project toggle, show/hide completed, manual refresh.
+- **Live updates** — the chart refreshes automatically when your notes change.
+- **Click to open** — clicking a task name or its bar opens the note (Ctrl/Cmd-click opens in a new tab).
+- **Today marker** — a red vertical line marks the current date.
+- **Configurable** — task tag, task folder, all frontmatter field names, and status values can be changed in the plugin settings, so it adapts to your TaskNotes configuration.
+
+## Installation (manual)
+
+1. Download `main.js`, `manifest.json`, and `styles.css` from this repository (or from the latest [release](../../releases)).
+2. In your vault, create the folder `.obsidian/plugins/tasknotes-gantt/` and copy the three files into it.
+3. In Obsidian, go to **Settings → Community plugins**, refresh the list of installed plugins, and enable **TaskNotes Gantt Chart**.
+4. Open the chart from the ribbon icon or the command palette: **TaskNotes Gantt Chart: Open Gantt chart**.
+
+### Installation via BRAT
+
+If you use the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin, add this repository (`<github-username>/Tasknotes-gantt-chart`) as a beta plugin. (Requires a published release — see below.)
+
+## Building from source
+
+```bash
+npm install
+npm run build   # produces main.js
+```
+
+For development with rebuild-on-save: `npm run dev`.
+
+## Releasing
+
+Tag a version to trigger the GitHub Action that builds the plugin and attaches `main.js`, `manifest.json`, and `styles.css` to a draft release:
+
+```bash
+git tag 0.1.0
+git push origin 0.1.0
+```
+
+## Settings
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| Task tag | `task` | Frontmatter tag that marks a note as a task |
+| Task folder | *(empty)* | Limit scanning to one folder |
+| Start date fields | `scheduled, start, startDate` | Frontmatter keys for the bar start |
+| End date fields | `due, end, endDate, deadline` | Frontmatter keys for the bar end |
+| Created date fields | `date created, dateCreated, created` | Fallback start |
+| Completed date fields | `completedDate, completed, date modified, dateModified` | Fallback end for done tasks |
+| Done / Cancelled statuses | `done, complete, completed` / `cancelled, canceled, dropped` | Status classification |
+| Default zoom | Week | Day / Week / Month |
+| Group by project | On | Group rows under the first `projects` link |
+| Show completed tasks | On | Include done/cancelled tasks |
+
+## License
+
+MIT
