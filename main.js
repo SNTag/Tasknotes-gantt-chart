@@ -638,6 +638,7 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
     super(leaf);
     this.chartEl = null;
     this.parentChipEl = null;
+    this.depthSelectEl = null;
     this.filterText = "";
     this.parentFile = null;
     this.plugin = plugin;
@@ -669,8 +670,12 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
     this.registerEvent(this.app.vault.on("rename", delayedRefresh));
   }
   /** Scope the chart to one parent project note (null shows all tasks). */
-  setParent(file) {
+  setParent(file, depth) {
     this.parentFile = file;
+    if (depth != null && Number.isFinite(depth)) {
+      this.maxDepth = Math.min(Math.max(Math.floor(depth), 1), 6);
+      if (this.depthSelectEl) this.depthSelectEl.value = String(this.maxDepth);
+    }
     this.updateParentChip();
     this.refresh();
   }
@@ -693,6 +698,7 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
       this.maxDepth = Number(depthSelect.value);
       this.refresh();
     });
+    this.depthSelectEl = depthSelect;
     const filter = bar.createEl("input", {
       cls: "tg-filter",
       attr: { type: "search", placeholder: "Filter tasks\u2026" }
@@ -786,6 +792,7 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
   async onClose() {
     this.chartEl = null;
     this.parentChipEl = null;
+    this.depthSelectEl = null;
   }
 };
 var ParentNoteModal = class extends import_obsidian2.FuzzySuggestModal {
@@ -975,7 +982,48 @@ var TasknotesGanttPlugin = class extends import_obsidian4.Plugin {
         if (view && file) view.setParent(file);
       }
     });
+    this.addCommand({
+      id: "copy-gantt-link",
+      name: "Copy Gantt chart link for current note (as parent project)",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return false;
+        if (!checking) {
+          void navigator.clipboard.writeText(this.buildGanttUri(file));
+          new import_obsidian4.Notice("TaskNotes Gantt: link copied to clipboard");
+        }
+        return true;
+      }
+    });
+    this.registerObsidianProtocolHandler("tasknotes-gantt", async (params) => {
+      var _a, _b;
+      const view = await this.activateView();
+      if (!view) return;
+      const parentName = ((_b = (_a = params.parent) != null ? _a : params.parentNote) != null ? _b : "").trim();
+      if (!parentName) return;
+      const file = this.resolveNote(parentName);
+      if (!file) {
+        new import_obsidian4.Notice(`TaskNotes Gantt: note "${parentName}" not found`);
+        return;
+      }
+      const depth = params.depth ? Number(params.depth) : void 0;
+      view.setParent(file, depth);
+    });
     this.addSettingTab(new TasknotesGanttSettingTab(this.app, this));
+  }
+  /** Resolve a note name, wikilink, or path to a TFile (null if not found). */
+  resolveNote(name) {
+    const cleaned = name.replace(/^\[\[|\]\]$/g, "").split("|")[0].trim();
+    const byLink = this.app.metadataCache.getFirstLinkpathDest(cleaned, "");
+    if (byLink instanceof import_obsidian4.TFile) return byLink;
+    const byPath = this.app.vault.getAbstractFileByPath(cleaned);
+    return byPath instanceof import_obsidian4.TFile ? byPath : null;
+  }
+  /** Build an obsidian:// link that opens this view scoped to the given note. */
+  buildGanttUri(file) {
+    const vault = encodeURIComponent(this.app.vault.getName());
+    const parent = encodeURIComponent(file.basename);
+    return `obsidian://tasknotes-gantt?vault=${vault}&parent=${parent}`;
   }
   async activateView() {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_TASKNOTES_GANTT);

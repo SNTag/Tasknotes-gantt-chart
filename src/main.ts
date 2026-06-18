@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf } from "obsidian";
+import { Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { DEFAULT_SETTINGS, TasknotesGanttSettings } from "./settings";
 import { TasknotesGanttSettingTab } from "./settingsTab";
 import { TasknotesGanttView, VIEW_TYPE_TASKNOTES_GANTT } from "./view";
@@ -43,7 +43,53 @@ export default class TasknotesGanttPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: "copy-gantt-link",
+			name: "Copy Gantt chart link for current note (as parent project)",
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file) return false;
+				if (!checking) {
+					void navigator.clipboard.writeText(this.buildGanttUri(file));
+					new Notice("TaskNotes Gantt: link copied to clipboard");
+				}
+				return true;
+			},
+		});
+
+		// Links like obsidian://tasknotes-gantt?parent=Everyday[&depth=2] open the
+		// standalone view scoped to that note. Usable as a clickable link in any note.
+		this.registerObsidianProtocolHandler("tasknotes-gantt", async (params) => {
+			const view = await this.activateView();
+			if (!view) return;
+			const parentName = (params.parent ?? params.parentNote ?? "").trim();
+			if (!parentName) return;
+			const file = this.resolveNote(parentName);
+			if (!file) {
+				new Notice(`TaskNotes Gantt: note "${parentName}" not found`);
+				return;
+			}
+			const depth = params.depth ? Number(params.depth) : undefined;
+			view.setParent(file, depth);
+		});
+
 		this.addSettingTab(new TasknotesGanttSettingTab(this.app, this));
+	}
+
+	/** Resolve a note name, wikilink, or path to a TFile (null if not found). */
+	resolveNote(name: string): TFile | null {
+		const cleaned = name.replace(/^\[\[|\]\]$/g, "").split("|")[0].trim();
+		const byLink = this.app.metadataCache.getFirstLinkpathDest(cleaned, "");
+		if (byLink instanceof TFile) return byLink;
+		const byPath = this.app.vault.getAbstractFileByPath(cleaned);
+		return byPath instanceof TFile ? byPath : null;
+	}
+
+	/** Build an obsidian:// link that opens this view scoped to the given note. */
+	buildGanttUri(file: TFile): string {
+		const vault = encodeURIComponent(this.app.vault.getName());
+		const parent = encodeURIComponent(file.basename);
+		return `obsidian://tasknotes-gantt?vault=${vault}&parent=${parent}`;
 	}
 
 	async activateView(): Promise<TasknotesGanttView | null> {

@@ -11,6 +11,7 @@ export class TasknotesGanttView extends ItemView {
 	private plugin: TasknotesGanttPlugin;
 	private chartEl: HTMLElement | null = null;
 	private parentChipEl: HTMLElement | null = null;
+	private depthSelectEl: HTMLSelectElement | null = null;
 	private zoom: ZoomLevel;
 	private groupByProject: boolean;
 	private showCompleted: boolean;
@@ -56,8 +57,12 @@ export class TasknotesGanttView extends ItemView {
 	}
 
 	/** Scope the chart to one parent project note (null shows all tasks). */
-	setParent(file: TFile | null): void {
+	setParent(file: TFile | null, depth?: number): void {
 		this.parentFile = file;
+		if (depth != null && Number.isFinite(depth)) {
+			this.maxDepth = Math.min(Math.max(Math.floor(depth), 1), 6);
+			if (this.depthSelectEl) this.depthSelectEl.value = String(this.maxDepth);
+		}
 		this.updateParentChip();
 		this.refresh();
 	}
@@ -82,6 +87,7 @@ export class TasknotesGanttView extends ItemView {
 			this.maxDepth = Number(depthSelect.value);
 			this.refresh();
 		});
+		this.depthSelectEl = depthSelect;
 
 		const filter = bar.createEl("input", {
 			cls: "tg-filter",
@@ -199,6 +205,7 @@ export class TasknotesGanttView extends ItemView {
 	async onClose(): Promise<void> {
 		this.chartEl = null;
 		this.parentChipEl = null;
+		this.depthSelectEl = null;
 	}
 }
 

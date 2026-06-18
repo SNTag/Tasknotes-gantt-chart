@@ -44,6 +44,21 @@ You can point the chart at one parent note (e.g. `Example Project Overview`) and
 
 Note that membership follows the TaskNotes model: a note is a child of a project when its **`projects` frontmatter** links to it. Plain `[[wikilinks]]` in a note's body do not create hierarchy edges.
 
+### Linking to a pre-scoped chart from a note
+
+You can put a clickable link in any note that opens the standalone Gantt view already scoped to a parent project, using an Obsidian URI:
+
+```markdown
+[Everyday plan](obsidian://tasknotes-gantt?parent=Everyday)
+[Everyday plan, 2 levels deep](obsidian://tasknotes-gantt?parent=Everyday&depth=2)
+```
+
+- `parent` is the note name (or full path); it's resolved the same way a `[[wikilink]]` is. URL-encode spaces, e.g. `parent=Daily%20Plan`.
+- `depth` (optional, 1–6) sets the sub-project depth; if omitted, the toolbar/settings default is used.
+- If you have more than one vault, add `&vault=YourVaultName`.
+
+To avoid hand-writing the link, open the note you want as the parent and run the command **"Copy Gantt chart link for current note (as parent project)"** — it copies a ready-to-paste `obsidian://` link (including the vault name) to your clipboard.
+
 ## Using it as a Bases layout (database view)
 
 On Obsidian 1.10+ the plugin registers a **"TaskNotes Gantt"** layout for [Bases](https://help.obsidian.md/bases), so it appears in the same Layout dropdown as Table, Cards, and the TaskNotes layouts:
