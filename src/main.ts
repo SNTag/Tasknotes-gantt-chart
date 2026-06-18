@@ -58,16 +58,25 @@ export default class TasknotesGanttPlugin extends Plugin {
 		});
 
 		// Links like obsidian://tasknotes-gantt?parent=Everyday[&depth=2] open the
-		// standalone view scoped to that note. Usable as a clickable link in any note.
+		// standalone view scoped to that note. With no parent param, the note that
+		// was active when the link was clicked becomes the parent. Usable as a
+		// clickable link in any note.
 		this.registerObsidianProtocolHandler("tasknotes-gantt", async (params) => {
+			// Capture the active note first — opening the view changes the active file.
+			const activeBefore = this.app.workspace.getActiveFile();
 			const view = await this.activateView();
 			if (!view) return;
 			const parentName = (params.parent ?? params.parentNote ?? "").trim();
-			if (!parentName) return;
-			const file = this.resolveNote(parentName);
-			if (!file) {
-				new Notice(`TaskNotes Gantt: note "${parentName}" not found`);
-				return;
+			let file: TFile | null;
+			if (parentName) {
+				file = this.resolveNote(parentName);
+				if (!file) {
+					new Notice(`TaskNotes Gantt: note "${parentName}" not found`);
+					return;
+				}
+			} else {
+				file = activeBefore;
+				if (!file) return; // No parent given and no active note: just open the view.
 			}
 			const depth = params.depth ? Number(params.depth) : undefined;
 			view.setParent(file, depth);

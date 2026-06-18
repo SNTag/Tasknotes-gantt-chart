@@ -997,14 +997,20 @@ var TasknotesGanttPlugin = class extends import_obsidian4.Plugin {
     });
     this.registerObsidianProtocolHandler("tasknotes-gantt", async (params) => {
       var _a, _b;
+      const activeBefore = this.app.workspace.getActiveFile();
       const view = await this.activateView();
       if (!view) return;
       const parentName = ((_b = (_a = params.parent) != null ? _a : params.parentNote) != null ? _b : "").trim();
-      if (!parentName) return;
-      const file = this.resolveNote(parentName);
-      if (!file) {
-        new import_obsidian4.Notice(`TaskNotes Gantt: note "${parentName}" not found`);
-        return;
+      let file;
+      if (parentName) {
+        file = this.resolveNote(parentName);
+        if (!file) {
+          new import_obsidian4.Notice(`TaskNotes Gantt: note "${parentName}" not found`);
+          return;
+        }
+      } else {
+        file = activeBefore;
+        if (!file) return;
       }
       const depth = params.depth ? Number(params.depth) : void 0;
       view.setParent(file, depth);

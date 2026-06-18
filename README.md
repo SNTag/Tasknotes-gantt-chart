@@ -51,9 +51,10 @@ You can put a clickable link in any note that opens the standalone Gantt view al
 ```markdown
 [Everyday plan](obsidian://tasknotes-gantt?parent=Everyday)
 [Everyday plan, 2 levels deep](obsidian://tasknotes-gantt?parent=Everyday&depth=2)
+[Gantt for this note](obsidian://tasknotes-gantt)
 ```
 
-- `parent` is the note name (or full path); it's resolved the same way a `[[wikilink]]` is. URL-encode spaces, e.g. `parent=Daily%20Plan`.
+- `parent` is the note name (or full path); it's resolved the same way a `[[wikilink]]` is. URL-encode spaces, e.g. `parent=Daily%20Plan`. **If you omit `parent` entirely, the note you clicked the link from becomes the parent** — so the same bare link can be reused in any project note.
 - `depth` (optional, 1–6) sets the sub-project depth; if omitted, the toolbar/settings default is used.
 - If you have more than one vault, add `&vault=YourVaultName`.
 
