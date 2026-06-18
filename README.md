@@ -1,8 +1,13 @@
 # TaskNotes Gantt Chart
 
-An Obsidian plugin that generates a **Gantt chart in a database view format** from your [TaskNotes](https://github.com/callumalpass/tasknotes)-style notes (one note per task, metadata in YAML frontmatter).
+An Obsidian plugin that generates a **Gantt chart** from your [TaskNotes](https://github.com/callumalpass/tasknotes)-style notes (one note per task, metadata in YAML frontmatter).
 
-Each task row shows database columns (task, status, priority) pinned on the left, with a scrollable timeline of Gantt bars on the right. Tasks are grouped by their linked project.
+Each task row shows a pinned **Task** column on the left and a scrollable timeline of Gantt bars on the right, grouped by linked project. Status, priority, and dates are encoded on the bars (bar color, a priority symbol, and the hover tooltip) rather than as extra columns.
+
+There are two ways to use it:
+
+- A dedicated **standalone view** — the primary, most complete experience: parent-project scoping, depth coloring, inline checkbox tasks, and `obsidian://` deep links.
+- An optional **Bases layout** for Obsidian's database view (1.10+), for charting an existing base.
 
 ## How it works
 
@@ -76,6 +81,8 @@ To avoid hand-writing the link, open the note you want as the parent and run the
 
 ## Using it as a Bases layout (database view)
 
+> The standalone view above is the recommended, more complete path. The Bases layout is a convenience for charting an existing base and does **not** include inline checkbox tasks.
+
 On Obsidian 1.10+ the plugin registers a **"TaskNotes Gantt"** layout for [Bases](https://help.obsidian.md/bases), so it appears in the same Layout dropdown as Table, Cards, and the TaskNotes layouts:
 
 1. Create or open a base (e.g. the one TaskNotes generates), or insert one in a note.
@@ -97,12 +104,24 @@ Dates for the bars are still resolved from frontmatter using the field mappings 
 
 ## Features
 
-- **Database view layout** — a sticky Task column plus timeline bars, grouped by project. Status, priority, and the start/end dates are encoded visually (bar color, priority symbol, hover tooltip) rather than as extra columns.
-- **Toolbar** — text filter, Day/Week/Month zoom, group-by-project toggle, show/hide completed, manual refresh.
+- **Chart layout** — a sticky Task column plus timeline bars, grouped by project. Status, priority, and the start/end dates are encoded visually (bar color, priority symbol, hover tooltip) rather than as extra columns.
+- **Parent-project scoping** — focus the chart on one note and recurse through its `projects` subtree, with rows tinted by nesting depth.
+- **Inline checkbox tasks** — pull `- [ ]` tasks (with Dataview dates) out of note bodies into the parent-scoped chart.
+- **Deep links** — `obsidian://tasknotes-gantt?parent=…` opens the view pre-scoped from a link in any note.
+- **Toolbar** — parent-note picker, sub-project depth selector, text filter, Day/Week/Month zoom, group-by-project toggle, show/hide completed, inline-tasks toggle, and manual refresh.
+- **TaskNotes-aware colors** — bars use the exact status colors configured in TaskNotes; priority symbols use TaskNotes priority colors.
 - **Live updates** — the chart refreshes automatically when your notes change.
-- **Click to open** — clicking a task name or its bar opens the note (Ctrl/Cmd-click opens in a new tab).
+- **Click to open** — clicking a task name or its bar opens the note (Ctrl/Cmd-click opens in a new tab; inline tasks open at their line).
 - **Today marker** — a red vertical line marks the current date.
 - **Configurable** — task tag, task folder, all frontmatter field names, and status values can be changed in the plugin settings, so it adapts to your TaskNotes configuration.
+
+## Commands
+
+Available in the command palette (and the ribbon icon opens the view):
+
+- **Open Gantt chart** — open the standalone view.
+- **Open Gantt chart for current note (as parent project)** — open it scoped to the active note's project tree.
+- **Copy Gantt chart link for current note (as parent project)** — copy a ready-to-paste `obsidian://` link to the clipboard.
 
 ## Installation (manual)
 
@@ -129,8 +148,8 @@ For development with rebuild-on-save: `npm run dev`.
 Tag a version to trigger the GitHub Action that builds the plugin and attaches `main.js`, `manifest.json`, and `styles.css` to a draft release:
 
 ```bash
-git tag 0.1.0
-git push origin 0.1.0
+git tag 0.9.0
+git push origin 0.9.0
 ```
 
 ## Settings
@@ -147,6 +166,8 @@ git push origin 0.1.0
 | Default zoom | Week | Day / Week / Month |
 | Group by project | On | Group rows under the first `projects` link |
 | Show completed tasks | On | Include done/cancelled tasks |
+| Sub-project depth | `3` | Levels of sub-projects to follow below a parent note (1–6) |
+| Include inline checkbox tasks | On | Pull inline `- [ ]` tasks (with Dataview dates) from note bodies in the parent-scoped view |
 
 ## License
 
