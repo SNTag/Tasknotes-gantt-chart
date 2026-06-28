@@ -124,7 +124,6 @@ export class TasknotesGanttSettingTab extends PluginSettingTab {
 			.addSlider((slider) =>
 				slider
 					.setLimits(1, 6, 1)
-					.setDynamicTooltip()
 					.setValue(this.plugin.settings.maxDepth)
 					.onChange(async (value) => {
 						this.plugin.settings.maxDepth = value;

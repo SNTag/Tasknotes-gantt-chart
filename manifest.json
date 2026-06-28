@@ -2,7 +2,7 @@
 	"id": "tasknotes-gantt",
 	"name": "TaskNotes Gantt Chart",
 	"version": "0.9.0",
-	"minAppVersion": "1.4.0",
+	"minAppVersion": "1.10.0",
 	"description": "Generate Gantt charts from TaskNotes-style notes, with recursive project scoping and inline task support.",
 	"author": "TaskNotes Gantt Chart contributors",
 	"isDesktopOnly": false
