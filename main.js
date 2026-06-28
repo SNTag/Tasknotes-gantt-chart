@@ -443,8 +443,8 @@ function pruneEmptyGroups(groups) {
 // src/tasknotesData.ts
 function tasknotesSettings(app) {
   var _a, _b;
-  const plugins = (_a = app.plugins) == null ? void 0 : _a.plugins;
-  const tn = plugins == null ? void 0 : plugins.tasknotes;
+  const registry = app.plugins;
+  const tn = (_a = registry == null ? void 0 : registry.plugins) == null ? void 0 : _a.tasknotes;
   return (_b = tn == null ? void 0 : tn.settings) != null ? _b : null;
 }
 function buildStatusColorMap(app) {

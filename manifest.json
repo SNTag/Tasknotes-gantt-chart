@@ -3,7 +3,7 @@
 	"name": "TaskNotes Gantt Chart",
 	"version": "0.9.0",
 	"minAppVersion": "1.4.0",
-	"description": "Generates a Gantt chart in a database view format from TaskNotes-style frontmatter.",
+	"description": "Generate Gantt charts from TaskNotes-style notes, with recursive project scoping and inline task support.",
 	"author": "TaskNotes Gantt Chart contributors",
 	"isDesktopOnly": false
 }
