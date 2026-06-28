@@ -27,7 +27,7 @@ __export(main_exports, {
   default: () => TasknotesGanttPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/settings.ts
 var ZOOM_PX_PER_DAY = {
@@ -120,7 +120,7 @@ var TasknotesGanttSettingTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(containerEl).setName("Sub-project depth").setDesc(
       "When the chart is scoped to a parent note, how many levels of sub-projects to follow."
     ).addSlider(
-      (slider) => slider.setLimits(1, 6, 1).setDynamicTooltip().setValue(this.plugin.settings.maxDepth).onChange(async (value) => {
+      (slider) => slider.setLimits(1, 6, 1).setValue(this.plugin.settings.maxDepth).onChange(async (value) => {
         this.plugin.settings.maxDepth = value;
         await this.plugin.saveSettings();
       })
@@ -149,9 +149,10 @@ var TasknotesGanttSettingTab = class extends import_obsidian.PluginSettingTab {
 };
 
 // src/view.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 
 // src/tasks.ts
+var import_obsidian2 = require("obsidian");
 function startOfDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
@@ -290,7 +291,7 @@ function collectProjectParents(app) {
   const parents = [];
   for (const path of index.keys()) {
     const file = app.vault.getAbstractFileByPath(path);
-    if (file && "basename" in file) parents.push(file);
+    if (file instanceof import_obsidian2.TFile) parents.push(file);
   }
   parents.sort((a, b) => a.path.localeCompare(b.path));
   return parents;
@@ -620,7 +621,7 @@ function renderGroupedGantt(app, containerEl, groups, opts) {
         const link = nameCell.createEl("a", { cls: "tg-task-link", text: label });
         link.addEventListener("click", (evt) => {
           evt.preventDefault();
-          app.workspace.openLinkText(path, "", evt.ctrlKey || evt.metaKey);
+          void app.workspace.openLinkText(path, "", evt.ctrlKey || evt.metaKey);
         });
       } else {
         nameCell.setText(label);
@@ -682,7 +683,7 @@ function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, t
     if (task.kind === "inline" && task.line != null) {
       void app.workspace.getLeaf(mod).openFile(task.file, { eState: { line: task.line } });
     } else {
-      app.workspace.openLinkText(task.file.path, "", mod);
+      void app.workspace.openLinkText(task.file.path, "", mod);
     }
   };
   const meta = row.createDiv({ cls: "tg-meta" });
@@ -759,7 +760,7 @@ function checkboxGlyph(kind) {
 
 // src/view.ts
 var VIEW_TYPE_TASKNOTES_GANTT = "tasknotes-gantt-view";
-var TasknotesGanttView = class extends import_obsidian2.ItemView {
+var TasknotesGanttView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.chartEl = null;
@@ -791,7 +792,7 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
     this.buildToolbar(root.createDiv({ cls: "tg-toolbar" }));
     this.chartEl = root.createDiv({ cls: "tg-chart" });
     this.refresh();
-    const delayedRefresh = (0, import_obsidian2.debounce)(() => this.refresh(), 1e3, true);
+    const delayedRefresh = (0, import_obsidian3.debounce)(() => this.refresh(), 1e3, true);
     this.registerEvent(this.app.metadataCache.on("resolved", delayedRefresh));
     this.registerEvent(this.app.metadataCache.on("changed", delayedRefresh));
     this.registerEvent(this.app.vault.on("delete", delayedRefresh));
@@ -937,7 +938,7 @@ var TasknotesGanttView = class extends import_obsidian2.ItemView {
     this.depthSelectEl = null;
   }
 };
-var ParentNoteModal = class extends import_obsidian2.FuzzySuggestModal {
+var ParentNoteModal = class extends import_obsidian3.FuzzySuggestModal {
   constructor(app, onChoose) {
     super(app);
     this.onChoose = onChoose;
@@ -957,9 +958,9 @@ var ParentNoteModal = class extends import_obsidian2.FuzzySuggestModal {
 };
 
 // src/basesView.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 var GANTT_BASES_VIEW_ID = "tasknotes-gantt";
-var GanttBasesView = class extends import_obsidian3.BasesView {
+var GanttBasesView = class extends import_obsidian4.BasesView {
   constructor(controller, containerEl, plugin) {
     super(controller);
     this.type = GANTT_BASES_VIEW_ID;
@@ -1020,9 +1021,9 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
     if (typeof value !== "string" || !value.trim()) return null;
     const path = value.replace(/^\[\[|\]\]$/g, "").split("|")[0].trim();
     const direct = this.app.vault.getAbstractFileByPath(path);
-    if (direct instanceof import_obsidian3.TFile) return direct;
+    if (direct instanceof import_obsidian4.TFile) return direct;
     const resolved = this.app.metadataCache.getFirstLinkpathDest(path, "");
-    return resolved instanceof import_obsidian3.TFile ? resolved : null;
+    return resolved instanceof import_obsidian4.TFile ? resolved : null;
   }
   depth() {
     const value = Number(this.config.get("depth"));
@@ -1091,7 +1092,7 @@ function ganttBasesOptions() {
 }
 
 // src/main.ts
-var TasknotesGanttPlugin = class extends import_obsidian4.Plugin {
+var TasknotesGanttPlugin = class extends import_obsidian5.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
@@ -1132,7 +1133,7 @@ var TasknotesGanttPlugin = class extends import_obsidian4.Plugin {
         if (!file) return false;
         if (!checking) {
           void navigator.clipboard.writeText(this.buildGanttUri(file));
-          new import_obsidian4.Notice("TaskNotes Gantt: link copied to clipboard");
+          new import_obsidian5.Notice("TaskNotes Gantt: link copied to clipboard");
         }
         return true;
       }
@@ -1147,7 +1148,7 @@ var TasknotesGanttPlugin = class extends import_obsidian4.Plugin {
       if (parentName) {
         file = this.resolveNote(parentName);
         if (!file) {
-          new import_obsidian4.Notice(`TaskNotes Gantt: note "${parentName}" not found`);
+          new import_obsidian5.Notice(`TaskNotes Gantt: note "${parentName}" not found`);
           return;
         }
       } else {
@@ -1163,9 +1164,9 @@ var TasknotesGanttPlugin = class extends import_obsidian4.Plugin {
   resolveNote(name) {
     const cleaned = name.replace(/^\[\[|\]\]$/g, "").split("|")[0].trim();
     const byLink = this.app.metadataCache.getFirstLinkpathDest(cleaned, "");
-    if (byLink instanceof import_obsidian4.TFile) return byLink;
+    if (byLink instanceof import_obsidian5.TFile) return byLink;
     const byPath = this.app.vault.getAbstractFileByPath(cleaned);
-    return byPath instanceof import_obsidian4.TFile ? byPath : null;
+    return byPath instanceof import_obsidian5.TFile ? byPath : null;
   }
   /** Build an obsidian:// link that opens this view scoped to the given note. */
   buildGanttUri(file) {
@@ -1188,7 +1189,8 @@ var TasknotesGanttPlugin = class extends import_obsidian4.Plugin {
     return leaf.view instanceof TasknotesGanttView ? leaf.view : null;
   }
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const data = await this.loadData();
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
   }
   async saveSettings() {
     await this.saveData(this.settings);

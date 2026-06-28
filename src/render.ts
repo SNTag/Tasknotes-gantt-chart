@@ -195,7 +195,7 @@ export function renderGroupedGantt(
 				const link = nameCell.createEl("a", { cls: "tg-task-link", text: label });
 				link.addEventListener("click", (evt) => {
 					evt.preventDefault();
-					app.workspace.openLinkText(path, "", evt.ctrlKey || evt.metaKey);
+					void app.workspace.openLinkText(path, "", evt.ctrlKey || evt.metaKey);
 				});
 			} else {
 				nameCell.setText(label);
@@ -288,7 +288,7 @@ function renderTaskRow(
 		if (task.kind === "inline" && task.line != null) {
 			void app.workspace.getLeaf(mod).openFile(task.file, { eState: { line: task.line } });
 		} else {
-			app.workspace.openLinkText(task.file.path, "", mod);
+			void app.workspace.openLinkText(task.file.path, "", mod);
 		}
 	};
 

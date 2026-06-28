@@ -28,7 +28,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
+          # Recreate any pre-existing release for this tag so the title and the
+          # required assets are always correct (keeps the git tag in place).
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release delete "$tag" --yes --cleanup-tag=false
+          fi
           gh release create "$tag" \
             --title "$tag" \
+            --generate-notes \
             --latest \
             main.js manifest.json styles.css

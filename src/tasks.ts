@@ -1,4 +1,5 @@
-import type { App, TFile } from "obsidian";
+import { TFile } from "obsidian";
+import type { App } from "obsidian";
 import { TasknotesGanttSettings, splitFieldList } from "./settings";
 
 export type StatusKind = "open" | "in-progress" | "done" | "cancelled" | "other";
@@ -200,7 +201,7 @@ export function collectProjectParents(app: App): TFile[] {
 	const parents: TFile[] = [];
 	for (const path of index.keys()) {
 		const file = app.vault.getAbstractFileByPath(path);
-		if (file && "basename" in file) parents.push(file as TFile);
+		if (file instanceof TFile) parents.push(file);
 	}
 	parents.sort((a, b) => a.path.localeCompare(b.path));
 	return parents;
