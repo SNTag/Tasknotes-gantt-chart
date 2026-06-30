@@ -405,21 +405,38 @@ async function collectInlineTasksFromFile(app, settings, file) {
   return out;
 }
 async function augmentGroupsWithInlineTasks(app, settings, groups) {
+  var _a;
   const scanned = /* @__PURE__ */ new Set();
   const inlineFor = async (file) => {
     if (scanned.has(file.path)) return [];
     scanned.add(file.path);
     return collectInlineTasksFromFile(app, settings, file);
   };
+  const headerFiles = /* @__PURE__ */ new Set();
+  for (const group of groups) {
+    if (group.file) headerFiles.add(group.file.path);
+  }
   const result = [];
   for (const group of groups) {
     const tasks = [];
     if (group.file) tasks.push(...await inlineFor(group.file));
+    const promoted = [];
     for (const task of group.tasks) {
       tasks.push(task);
-      tasks.push(...await inlineFor(task.file));
+      if (task.kind === "inline" || headerFiles.has(task.file.path)) continue;
+      const inline = await inlineFor(task.file);
+      if (inline.length > 0) {
+        promoted.push({
+          name: task.title,
+          depth: ((_a = group.depth) != null ? _a : 0) + 1,
+          file: task.file,
+          // Sit directly under the new header, like project-child rows.
+          tasks: inline.map((t) => ({ ...t, indent: void 0 }))
+        });
+      }
     }
     result.push({ ...group, tasks });
+    result.push(...promoted);
   }
   return result;
 }

@@ -370,9 +370,17 @@ export async function collectInlineTasksFromFile(
 }
 
 /**
- * Add each note's inline checkbox tasks as rows under that note: the group's
- * own (overview) note first, then each note-task row's inline children right
- * after it. Each note is scanned at most once.
+ * Pull each note's inline checkbox tasks into the chart.
+ *
+ * A project header note keeps its own body's inline tasks as direct child rows.
+ * A note-task row that carries inline checkbox tasks is *promoted* to its own
+ * sub-project header — mirroring how a note referenced as a project becomes a
+ * group — with those checkbox tasks listed beneath it. The note keeps its bar
+ * in its parent group, exactly as a project-parent note does.
+ *
+ * Notes that already back a header (because another note links to them as a
+ * project) are left to that existing header; their inline tasks attach there
+ * rather than spawning a duplicate group. Each note is scanned at most once.
  */
 export async function augmentGroupsWithInlineTasks(
 	app: App,
@@ -386,15 +394,34 @@ export async function augmentGroupsWithInlineTasks(
 		return collectInlineTasksFromFile(app, settings, file);
 	};
 
+	// Notes that already render as a project header (from the project tree).
+	const headerFiles = new Set<string>();
+	for (const group of groups) {
+		if (group.file) headerFiles.add(group.file.path);
+	}
+
 	const result: ProjectGroup[] = [];
 	for (const group of groups) {
 		const tasks: GanttTask[] = [];
 		if (group.file) tasks.push(...(await inlineFor(group.file)));
+
+		const promoted: ProjectGroup[] = [];
 		for (const task of group.tasks) {
 			tasks.push(task);
-			tasks.push(...(await inlineFor(task.file)));
+			if (task.kind === "inline" || headerFiles.has(task.file.path)) continue;
+			const inline = await inlineFor(task.file);
+			if (inline.length > 0) {
+				promoted.push({
+					name: task.title,
+					depth: (group.depth ?? 0) + 1,
+					file: task.file,
+					// Sit directly under the new header, like project-child rows.
+					tasks: inline.map((t) => ({ ...t, indent: undefined })),
+				});
+			}
 		}
 		result.push({ ...group, tasks });
+		result.push(...promoted);
 	}
 	return result;
 }
