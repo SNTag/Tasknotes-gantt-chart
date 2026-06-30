@@ -298,6 +298,11 @@ function collectProjectParents(app) {
 function collectProjectTree(app, settings, parent, maxDepth) {
   return pruneEmptyGroups(collectProjectTreeRaw(app, settings, parent, maxDepth));
 }
+function noteHasInlineTasks(app, file) {
+  var _a;
+  const items = (_a = app.metadataCache.getFileCache(file)) == null ? void 0 : _a.listItems;
+  return items != null && items.some((i) => i.task !== void 0);
+}
 function collectProjectTreeRaw(app, settings, parent, maxDepth) {
   const childrenOf = buildProjectChildrenIndex(app);
   const groups = [];
@@ -320,7 +325,7 @@ function collectProjectTreeRaw(app, settings, parent, maxDepth) {
         tasks.push(task);
         emitted.add(child.path);
       }
-      const hasChildren = ((_b = childrenOf.get(child.path)) != null ? _b : []).length > 0;
+      const hasChildren = ((_b = childrenOf.get(child.path)) != null ? _b : []).length > 0 || noteHasInlineTasks(app, child);
       if (hasChildren && depth < maxDepth && !expanded.has(child.path)) {
         subProjects.push(child);
       }
@@ -405,38 +410,18 @@ async function collectInlineTasksFromFile(app, settings, file) {
   return out;
 }
 async function augmentGroupsWithInlineTasks(app, settings, groups) {
-  var _a;
   const scanned = /* @__PURE__ */ new Set();
   const inlineFor = async (file) => {
     if (scanned.has(file.path)) return [];
     scanned.add(file.path);
     return collectInlineTasksFromFile(app, settings, file);
   };
-  const headerFiles = /* @__PURE__ */ new Set();
-  for (const group of groups) {
-    if (group.file) headerFiles.add(group.file.path);
-  }
   const result = [];
   for (const group of groups) {
     const tasks = [];
     if (group.file) tasks.push(...await inlineFor(group.file));
-    const promoted = [];
-    for (const task of group.tasks) {
-      tasks.push(task);
-      if (task.kind === "inline" || headerFiles.has(task.file.path)) continue;
-      const inline = await inlineFor(task.file);
-      if (inline.length > 0) {
-        promoted.push({
-          name: task.title,
-          depth: ((_a = group.depth) != null ? _a : 0) + 1,
-          file: task.file,
-          // Sit directly under the new header, like project-child rows.
-          tasks: inline.map((t) => ({ ...t, indent: void 0 }))
-        });
-      }
-    }
+    tasks.push(...group.tasks);
     result.push({ ...group, tasks });
-    result.push(...promoted);
   }
   return result;
 }

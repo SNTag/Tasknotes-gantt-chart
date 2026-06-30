@@ -221,6 +221,12 @@ export function collectProjectTree(
 	return pruneEmptyGroups(collectProjectTreeRaw(app, settings, parent, maxDepth));
 }
 
+/** True when the note's body contains at least one inline checkbox task. */
+function noteHasInlineTasks(app: App, file: TFile): boolean {
+	const items = app.metadataCache.getFileCache(file)?.listItems;
+	return items != null && items.some((i) => i.task !== undefined);
+}
+
 /**
  * Same as collectProjectTree but without pruning empty groups, so callers that
  * add inline tasks afterwards (which can populate otherwise-empty project notes)
@@ -254,7 +260,11 @@ export function collectProjectTreeRaw(
 				tasks.push(task);
 				emitted.add(child.path);
 			}
-			const hasChildren = (childrenOf.get(child.path) ?? []).length > 0;
+			// A note is expanded into its own header when other notes link to it as
+			// a project, or when its own body holds inline checkbox tasks — the
+			// latter mirrors how a TaskNotes note with sub-task notes is grouped.
+			const hasChildren =
+				(childrenOf.get(child.path) ?? []).length > 0 || noteHasInlineTasks(app, child);
 			if (hasChildren && depth < maxDepth && !expanded.has(child.path)) {
 				subProjects.push(child);
 			}
@@ -370,17 +380,12 @@ export async function collectInlineTasksFromFile(
 }
 
 /**
- * Pull each note's inline checkbox tasks into the chart.
+ * Add each group header note's inline checkbox tasks as child rows under it.
  *
- * A project header note keeps its own body's inline tasks as direct child rows.
- * A note-task row that carries inline checkbox tasks is *promoted* to its own
- * sub-project header — mirroring how a note referenced as a project becomes a
- * group — with those checkbox tasks listed beneath it. The note keeps its bar
- * in its parent group, exactly as a project-parent note does.
- *
- * Notes that already back a header (because another note links to them as a
- * project) are left to that existing header; their inline tasks attach there
- * rather than spawning a duplicate group. Each note is scanned at most once.
+ * A note carrying inline tasks is promoted to its own header by the project
+ * tree (see collectProjectTreeRaw), so its checkboxes attach here through the
+ * group's own `file`, listed before any sub-project task bars. Each note is
+ * scanned at most once.
  */
 export async function augmentGroupsWithInlineTasks(
 	app: App,
@@ -394,34 +399,12 @@ export async function augmentGroupsWithInlineTasks(
 		return collectInlineTasksFromFile(app, settings, file);
 	};
 
-	// Notes that already render as a project header (from the project tree).
-	const headerFiles = new Set<string>();
-	for (const group of groups) {
-		if (group.file) headerFiles.add(group.file.path);
-	}
-
 	const result: ProjectGroup[] = [];
 	for (const group of groups) {
 		const tasks: GanttTask[] = [];
 		if (group.file) tasks.push(...(await inlineFor(group.file)));
-
-		const promoted: ProjectGroup[] = [];
-		for (const task of group.tasks) {
-			tasks.push(task);
-			if (task.kind === "inline" || headerFiles.has(task.file.path)) continue;
-			const inline = await inlineFor(task.file);
-			if (inline.length > 0) {
-				promoted.push({
-					name: task.title,
-					depth: (group.depth ?? 0) + 1,
-					file: task.file,
-					// Sit directly under the new header, like project-child rows.
-					tasks: inline.map((t) => ({ ...t, indent: undefined })),
-				});
-			}
-		}
+		tasks.push(...group.tasks);
 		result.push({ ...group, tasks });
-		result.push(...promoted);
 	}
 	return result;
 }
