@@ -99,9 +99,34 @@ export class GanttBasesView extends BasesView {
 	private parentNote(): TFile | null {
 		const value = this.config.get("parentNote");
 		if (typeof value !== "string" || !value.trim()) return null;
-		const path = value.replace(/^\[\[|\]\]$/g, "").split("|")[0].trim();
-		const direct = this.app.vault.getAbstractFileByPath(path);
-		if (direct instanceof TFile) return direct;
+		if (/^this\b/.test(value.trim())) return this.thisFile();
+		return this.resolveNote(value);
+	}
+
+	/**
+	 * `parentNote: this` (or `this.file`): the note the base is embedded in, or the
+	 * active note for a base in the sidebar — the same file Bases binds `this` to.
+	 */
+	private thisFile(): TFile | null {
+		if (typeof this.config.getEvaluatedFormula === "function") {
+			try {
+				const evaluated = this.config.getEvaluatedFormula(this, "parentNote");
+				const file = this.resolveNote(evaluated.toString());
+				if (file) return file;
+			} catch {
+				// Fall through to the active file.
+			}
+		}
+		return this.app.workspace.getActiveFile();
+	}
+
+	private resolveNote(text: string): TFile | null {
+		const path = text.trim().replace(/^!?\[\[|\]\]$/g, "").split("|")[0].split("#")[0].trim();
+		if (!path) return null;
+		for (const candidate of [path, `${path}.md`]) {
+			const direct = this.app.vault.getAbstractFileByPath(candidate);
+			if (direct instanceof TFile) return direct;
+		}
 		const resolved = this.app.metadataCache.getFirstLinkpathDest(path, "");
 		return resolved instanceof TFile ? resolved : null;
 	}
@@ -157,7 +182,7 @@ export function ganttBasesOptions(): BasesAllOptions[] {
 			type: "file",
 			key: "parentNote",
 			displayName: "Parent note",
-			placeholder: "Optional — scope to a project tree",
+			placeholder: "Optional — a project note, or \"this\" for the embedding note",
 			filter: (file: TFile) => file.extension === "md",
 		},
 		{

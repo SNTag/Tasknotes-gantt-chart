@@ -1018,9 +1018,31 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
   parentNote() {
     const value = this.config.get("parentNote");
     if (typeof value !== "string" || !value.trim()) return null;
-    const path = value.replace(/^\[\[|\]\]$/g, "").split("|")[0].trim();
-    const direct = this.app.vault.getAbstractFileByPath(path);
-    if (direct instanceof import_obsidian3.TFile) return direct;
+    if (/^this\b/.test(value.trim())) return this.thisFile();
+    return this.resolveNote(value);
+  }
+  /**
+   * `parentNote: this` (or `this.file`): the note the base is embedded in, or the
+   * active note for a base in the sidebar — the same file Bases binds `this` to.
+   */
+  thisFile() {
+    if (typeof this.config.getEvaluatedFormula === "function") {
+      try {
+        const evaluated = this.config.getEvaluatedFormula(this, "parentNote");
+        const file = this.resolveNote(evaluated.toString());
+        if (file) return file;
+      } catch (e) {
+      }
+    }
+    return this.app.workspace.getActiveFile();
+  }
+  resolveNote(text) {
+    const path = text.trim().replace(/^!?\[\[|\]\]$/g, "").split("|")[0].split("#")[0].trim();
+    if (!path) return null;
+    for (const candidate of [path, `${path}.md`]) {
+      const direct = this.app.vault.getAbstractFileByPath(candidate);
+      if (direct instanceof import_obsidian3.TFile) return direct;
+    }
     const resolved = this.app.metadataCache.getFirstLinkpathDest(path, "");
     return resolved instanceof import_obsidian3.TFile ? resolved : null;
   }
@@ -1070,7 +1092,7 @@ function ganttBasesOptions() {
       type: "file",
       key: "parentNote",
       displayName: "Parent note",
-      placeholder: "Optional \u2014 scope to a project tree",
+      placeholder: 'Optional \u2014 a project note, or "this" for the embedding note',
       filter: (file) => file.extension === "md"
     },
     {
