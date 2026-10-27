@@ -109,6 +109,8 @@ Two optional view options narrow what counts as a sub-task:
 - **Sub-task tag** — e.g. `node`; only notes with this frontmatter tag are followed.
 - **Sub-task folder** — e.g. `Calendar/TaskNotes/Tasks`; only notes inside this folder are followed.
 
+Each top-level section gets its own color (row tint, accent and header dot), shared by the sub-sections nested under it. Set **Bar color** to *Group* to fill the bars with that color too instead of the status color.
+
 Notes from the base with no matching sub-tasks are hidden. In YAML:
 
 ```yaml
@@ -123,6 +125,7 @@ views:
     subtaskTag: node
     subtaskFolder: Calendar/TaskNotes/Tasks
     depth: "3"
+    barColor: group
 ```
 
 Dates for the bars are still resolved from frontmatter using the field mappings in the plugin settings (`scheduled`/`due` with created/modified fallbacks).

@@ -526,6 +526,14 @@ function assignDepthColors(groups) {
     group.color = GROUP_PALETTE[((_a = group.depth) != null ? _a : 0) % GROUP_PALETTE.length];
   }
 }
+function assignGroupColors(groups) {
+  var _a;
+  let index = -1;
+  for (const group of groups) {
+    if (((_a = group.depth) != null ? _a : 0) === 0 || index < 0) index++;
+    group.color = GROUP_PALETTE[index % GROUP_PALETTE.length];
+  }
+}
 var NO_PROJECT = "(no project)";
 var DEFAULT_COLUMNS = [
   { label: "Task", width: 260, kind: "title", value: (t) => t.title }
@@ -638,6 +646,7 @@ function renderGroupedGantt(app, containerEl, groups, opts) {
     for (const task of group.tasks) {
       renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth, {
         depthColor: group.color,
+        barColor: opts.barsByGroup ? group.color : void 0,
         statusColors,
         priorityMap
       });
@@ -677,7 +686,7 @@ function renderTimeScale(el, rangeStart, totalDays, pxPerDay) {
   }
 }
 function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth, visuals) {
-  var _a;
+  var _a, _b;
   const row = table.createDiv({ cls: "tg-row tg-task" });
   if (visuals.depthColor) {
     row.addClass("tg-has-depth");
@@ -734,10 +743,10 @@ function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, t
   });
   bar.style.left = `${left}px`;
   bar.style.width = `${width}px`;
-  const statusColor = visuals.statusColors.get(task.status.toLowerCase());
-  if (statusColor) {
+  const barColor = (_a = visuals.barColor) != null ? _a : visuals.statusColors.get(task.status.toLowerCase());
+  if (barColor) {
     bar.addClass("tg-bar-colored");
-    bar.style.background = statusColor;
+    bar.style.background = barColor;
   }
   bar.setAttr(
     "aria-label",
@@ -746,7 +755,7 @@ ${formatDate(task.start)} \u2192 ${formatDate(task.end)}${task.endInferred ? " (
 Status: ${task.status || "open"}${task.priority ? `
 Priority: ${task.priority}` : ""}`
   );
-  bar.setAttr("title", (_a = bar.getAttr("aria-label")) != null ? _a : "");
+  bar.setAttr("title", (_b = bar.getAttr("aria-label")) != null ? _b : "");
   if (width >= 60) {
     bar.createSpan({ cls: "tg-bar-label", text: task.title });
   }
@@ -1027,10 +1036,11 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
         accept
       })
     );
-    assignDepthColors(groups);
+    assignGroupColors(groups);
     renderGroupedGantt(this.app, this.rootEl, groups, {
       pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
       columns: DEFAULT_COLUMNS,
+      barsByGroup: this.barsByGroup(),
       emptyText: "No sub-tasks found for the notes in this base. A sub-task is a note whose 'projects' frontmatter links to one of them" + (tag || folder ? " and that matches the sub-task tag/folder options." : ".")
     });
   }
@@ -1050,9 +1060,11 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
       if (tasks.length === 0) continue;
       groups.push({ name: this.groupLabel(group.key), tasks });
     }
+    if (groups.length > 1) assignGroupColors(groups);
     renderGroupedGantt(this.app, this.rootEl, groups, {
       pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
-      columns: this.buildColumns(entryByPath)
+      columns: this.buildColumns(entryByPath),
+      barsByGroup: groups.length > 1 && this.barsByGroup()
     });
   }
   parentNote() {
@@ -1068,6 +1080,9 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
     const value = Number(this.config.get("depth"));
     if (Number.isFinite(value) && value >= 1) return Math.min(value, 6);
     return this.plugin.settings.maxDepth;
+  }
+  barsByGroup() {
+    return this.config.get("barColor") === "group";
   }
   zoom() {
     const value = this.config.get("zoom");
@@ -1137,6 +1152,13 @@ function ganttBasesOptions() {
       displayName: "Sub-project depth",
       default: "3",
       options: { "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6" }
+    },
+    {
+      type: "dropdown",
+      key: "barColor",
+      displayName: "Bar color",
+      default: "status",
+      options: { status: "Status", group: "Group" }
     },
     {
       type: "dropdown",

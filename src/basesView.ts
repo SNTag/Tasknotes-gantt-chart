@@ -16,6 +16,7 @@ import {
 	DEFAULT_COLUMNS,
 	GanttGroup,
 	assignDepthColors,
+	assignGroupColors,
 	renderGroupedGantt,
 } from "./render";
 
@@ -99,10 +100,11 @@ export class GanttBasesView extends BasesView {
 				accept,
 			})
 		);
-		assignDepthColors(groups);
+		assignGroupColors(groups);
 		renderGroupedGantt(this.app, this.rootEl, groups, {
 			pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
 			columns: DEFAULT_COLUMNS,
+			barsByGroup: this.barsByGroup(),
 			emptyText:
 				"No sub-tasks found for the notes in this base. A sub-task is a note whose 'projects' frontmatter links to one of them" +
 				(tag || folder ? " and that matches the sub-task tag/folder options." : "."),
@@ -128,9 +130,11 @@ export class GanttBasesView extends BasesView {
 			groups.push({ name: this.groupLabel(group.key), tasks });
 		}
 
+		if (groups.length > 1) assignGroupColors(groups);
 		renderGroupedGantt(this.app, this.rootEl, groups, {
 			pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
 			columns: this.buildColumns(entryByPath),
+			barsByGroup: groups.length > 1 && this.barsByGroup(),
 		});
 	}
 
@@ -148,6 +152,10 @@ export class GanttBasesView extends BasesView {
 		const value = Number(this.config.get("depth"));
 		if (Number.isFinite(value) && value >= 1) return Math.min(value, 6);
 		return this.plugin.settings.maxDepth;
+	}
+
+	private barsByGroup(): boolean {
+		return this.config.get("barColor") === "group";
 	}
 
 	private zoom(): ZoomLevel {
@@ -222,6 +230,13 @@ export function ganttBasesOptions(): BasesAllOptions[] {
 			displayName: "Sub-project depth",
 			default: "3",
 			options: { "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6" },
+		},
+		{
+			type: "dropdown",
+			key: "barColor",
+			displayName: "Bar color",
+			default: "status",
+			options: { status: "Status", group: "Group" },
 		},
 		{
 			type: "dropdown",

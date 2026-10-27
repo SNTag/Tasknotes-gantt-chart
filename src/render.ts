@@ -56,10 +56,24 @@ export function assignDepthColors(groups: GanttGroup[]): void {
 	}
 }
 
+/**
+ * Color every top-level group with its own palette color; nested groups
+ * (deeper sections that follow it) inherit their top-level group's color.
+ */
+export function assignGroupColors(groups: GanttGroup[]): void {
+	let index = -1;
+	for (const group of groups) {
+		if ((group.depth ?? 0) === 0 || index < 0) index++;
+		group.color = GROUP_PALETTE[index % GROUP_PALETTE.length];
+	}
+}
+
 export interface ChartOptions {
 	pxPerDay: number;
 	columns: Column[];
 	emptyText?: string;
+	/** Fill bars with their group's color instead of their status color. */
+	barsByGroup?: boolean;
 }
 
 const NO_PROJECT = "(no project)";
@@ -205,6 +219,7 @@ export function renderGroupedGantt(
 		for (const task of group.tasks) {
 			renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth, {
 				depthColor: group.color,
+				barColor: opts.barsByGroup ? group.color : undefined,
 				statusColors,
 				priorityMap,
 			});
@@ -256,6 +271,8 @@ function renderTimeScale(
 interface RowVisuals {
 	/** Row tint/accent color for the nesting depth. */
 	depthColor?: string;
+	/** Overrides the status color as the bar fill. */
+	barColor?: string;
 	/** TaskNotes status value -> color. */
 	statusColors: Map<string, string>;
 	/** TaskNotes priority value -> symbol/color. */
@@ -343,10 +360,10 @@ function renderTaskRow(
 	bar.style.left = `${left}px`;
 	bar.style.width = `${width}px`;
 	// Bar is colored by status, using the exact TaskNotes status color when available.
-	const statusColor = visuals.statusColors.get(task.status.toLowerCase());
-	if (statusColor) {
+	const barColor = visuals.barColor ?? visuals.statusColors.get(task.status.toLowerCase());
+	if (barColor) {
 		bar.addClass("tg-bar-colored");
-		bar.style.background = statusColor;
+		bar.style.background = barColor;
 	}
 	bar.setAttr(
 		"aria-label",

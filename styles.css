@@ -373,6 +373,7 @@
 	padding: 0 6px;
 	font-size: 10px;
 	color: white;
+	text-shadow: 0 0 2px rgba(0, 0, 0, 0.55);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
