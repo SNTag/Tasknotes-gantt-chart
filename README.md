@@ -31,7 +31,7 @@ For each task it determines:
 
 | Bar | Field(s) used (first match wins, configurable in settings) |
 | --- | --- |
-| **Start** | `scheduled`, `start`, `startDate` → falls back to `date created` / `dateCreated` |
+| **Start** | `scheduled`, `scheduled date`, `start`, `startDate` → falls back to `date created` / `created date` / `dateCreated` |
 | **End** | `due`, `end`, `endDate`, `deadline` → for done tasks falls back to `completedDate` / `date modified`; for open tasks the bar runs to **today** (drawn with a dashed edge to show the end is inferred) |
 | **Group** | first entry in `projects` (wikilinks are resolved to a display name, e.g. `Example Project Overview`) |
 | **Bar color** | `status` — using the **exact color you configured in TaskNotes** (read from its `customStatuses`); falls back to built-in colors if TaskNotes isn't installed. Overdue tasks get a red outline |
@@ -100,6 +100,31 @@ The Bases layout has two **view options** (open the layout's options menu, the s
 - **Parent note** — pick a note to scope the chart to that project's recursive subtree. When set, it overrides the base's group-by and instead walks the `projects` hierarchy (rows tinted by depth, just like the standalone view), while still honoring the base's **filters** (only notes that pass the base's filters appear).
 - **Sub-project depth** — how many levels of sub-projects to follow below the parent (1–6). Leave **Parent note** empty to go back to plain group-by behavior.
 
+### Showing sub-tasks of each note
+
+Turn on **Show sub-tasks** to treat every note the base returns as a section and chart its sub-tasks underneath. Sub-tasks are found across the whole vault by following `projects` links (a note whose `projects` links to a base result is its sub-task, a note linking to that sub-task is nested one level deeper, and so on down to **Sub-project depth**). They do **not** have to pass the base's filters, so a base can select, say, company notes while their tasks live in another folder.
+
+Two optional view options narrow what counts as a sub-task:
+
+- **Sub-task tag** — e.g. `node`; only notes with this frontmatter tag are followed.
+- **Sub-task folder** — e.g. `Calendar/TaskNotes/Tasks`; only notes inside this folder are followed.
+
+Notes from the base with no matching sub-tasks are hidden. In YAML:
+
+```yaml
+views:
+  - type: tasknotes-gantt
+    name: Master Tracker
+    filters:
+      and:
+        - file.path.startsWith("Atlas/CRM/Comp/")
+        - file.tags.contains("consulting")
+    subtasks: true
+    subtaskTag: node
+    subtaskFolder: Calendar/TaskNotes/Tasks
+    depth: "3"
+```
+
 Dates for the bars are still resolved from frontmatter using the field mappings in the plugin settings (`scheduled`/`due` with created/modified fallbacks).
 
 ## Features
@@ -158,9 +183,9 @@ git push origin 0.9.0
 | --- | --- | --- |
 | Task tag | `task` | Frontmatter tag that marks a note as a task |
 | Task folder | *(empty)* | Limit scanning to one folder |
-| Start date fields | `scheduled, start, startDate` | Frontmatter keys for the bar start |
+| Start date fields | `scheduled, scheduled date, start, startDate` | Frontmatter keys for the bar start |
 | End date fields | `due, end, endDate, deadline` | Frontmatter keys for the bar end |
-| Created date fields | `date created, dateCreated, created` | Fallback start |
+| Created date fields | `date created, created date, dateCreated, created` | Fallback start |
 | Completed date fields | `completedDate, completed, date modified, dateModified` | Fallback end for done tasks |
 | Done / Cancelled statuses | `done, complete, completed` / `cancelled, canceled, dropped` | Status classification |
 | Default zoom | Week | Day / Week / Month |

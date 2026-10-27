@@ -38,9 +38,9 @@ export const ZOOM_PX_PER_DAY: Record<ZoomLevel, number> = {
 export const DEFAULT_SETTINGS: TasknotesGanttSettings = {
 	taskTag: "task",
 	taskFolder: "",
-	startFields: "scheduled, start, startDate",
+	startFields: "scheduled, scheduled date, start, startDate",
 	endFields: "due, end, endDate, deadline",
-	createdFields: "date created, dateCreated, created",
+	createdFields: "date created, created date, dateCreated, created",
 	completedFields: "completedDate, completed, date modified, dateModified",
 	doneStatuses: "done, complete, completed",
 	cancelledStatuses: "cancelled, canceled, dropped",
