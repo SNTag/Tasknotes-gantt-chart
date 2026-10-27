@@ -100,20 +100,6 @@ The Bases layout has two **view options** (open the layout's options menu, the s
 - **Parent note** — pick a note to scope the chart to that project's recursive subtree. When set, it overrides the base's group-by and instead walks the `projects` hierarchy (rows tinted by depth, just like the standalone view), while still honoring the base's **filters** (only notes that pass the base's filters appear).
 - **Sub-project depth** — how many levels of sub-projects to follow below the parent (1–6). Leave **Parent note** empty to go back to plain group-by behavior.
 
-To make an embedded base chart **the note it is embedded in** (so the same block works in any project note), set the parent to `this`:
-
-````markdown
-```base
-views:
-  - type: tasknotes-gantt
-    name: Project Gantt
-    parentNote: this
-    depth: "3"
-```
-````
-
-`this` (or `this.file`) follows Obsidian's own `this` binding: the embedding note for an embedded base, or the active note for a base open in the sidebar.
-
 Dates for the bars are still resolved from frontmatter using the field mappings in the plugin settings (`scheduled`/`due` with created/modified fallbacks).
 
 ## Features
