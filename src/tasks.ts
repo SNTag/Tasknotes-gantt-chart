@@ -89,7 +89,7 @@ function classifyStatus(status: string, settings: TasknotesGanttSettings): Statu
 	return "other";
 }
 
-function hasTaskTag(fm: Record<string, unknown>, taskTag: string): boolean {
+export function hasTaskTag(fm: Record<string, unknown>, taskTag: string): boolean {
 	const wanted = taskTag.replace(/^#/, "").toLowerCase();
 	if (!wanted) return true;
 	const tags = asArray(fm["tags"] ?? fm["tag"]);
@@ -232,7 +232,31 @@ export function collectProjectTreeRaw(
 	parent: TFile,
 	maxDepth: number
 ): ProjectGroup[] {
+	return walkProjectTrees(app, settings, [parent], maxDepth, { requireTag: true });
+}
+
+export interface ProjectTreeOptions {
+	/** Require the task tag on child notes before charting them. */
+	requireTag: boolean;
+	/** Only follow children that pass this check (default: all). */
+	accept?: (file: TFile) => boolean;
+}
+
+/**
+ * Walk the `projects` hierarchy below each root. Each root becomes a depth-0
+ * section; notes whose `projects` link to it become its rows, and those with
+ * children of their own become nested sections, down to maxDepth. A note is
+ * only listed once across all roots.
+ */
+export function walkProjectTrees(
+	app: App,
+	settings: TasknotesGanttSettings,
+	roots: TFile[],
+	maxDepth: number,
+	options: ProjectTreeOptions
+): ProjectGroup[] {
 	const childrenOf = buildProjectChildrenIndex(app);
+	const accept = options.accept ?? (() => true);
 	const groups: ProjectGroup[] = [];
 	const expanded = new Set<string>();
 	const emitted = new Set<string>();
@@ -241,6 +265,7 @@ export function collectProjectTreeRaw(
 		const fm = app.metadataCache.getFileCache(file)?.frontmatter;
 		return String(fm?.["title"] ?? file.basename);
 	};
+	const acceptedChildren = (file: TFile): TFile[] => (childrenOf.get(file.path) ?? []).filter(accept);
 
 	const walk = (file: TFile, depth: number): void => {
 		if (expanded.has(file.path)) return;
@@ -248,13 +273,13 @@ export function collectProjectTreeRaw(
 
 		const tasks: GanttTask[] = [];
 		const subProjects: TFile[] = [];
-		for (const child of childrenOf.get(file.path) ?? []) {
-			const task = taskFromFile(app, child, settings, true);
+		for (const child of acceptedChildren(file)) {
+			const task = taskFromFile(app, child, settings, options.requireTag);
 			if (task && !emitted.has(child.path)) {
 				tasks.push(task);
 				emitted.add(child.path);
 			}
-			const hasChildren = (childrenOf.get(child.path) ?? []).length > 0;
+			const hasChildren = acceptedChildren(child).length > 0;
 			if (hasChildren && depth < maxDepth && !expanded.has(child.path)) {
 				subProjects.push(child);
 			}
@@ -264,7 +289,7 @@ export function collectProjectTreeRaw(
 		for (const sub of subProjects) walk(sub, depth + 1);
 	};
 
-	walk(parent, 0);
+	for (const root of roots) walk(root, 0);
 	return groups;
 }
 

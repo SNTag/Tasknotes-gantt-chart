@@ -38,9 +38,9 @@ var ZOOM_PX_PER_DAY = {
 var DEFAULT_SETTINGS = {
   taskTag: "task",
   taskFolder: "",
-  startFields: "scheduled, start, startDate",
+  startFields: "scheduled, scheduled date, start, startDate",
   endFields: "due, end, endDate, deadline",
-  createdFields: "date created, dateCreated, created",
+  createdFields: "date created, created date, dateCreated, created",
   completedFields: "completedDate, completed, date modified, dateModified",
   doneStatuses: "done, complete, completed",
   cancelledStatuses: "cancelled, canceled, dropped",
@@ -299,28 +299,36 @@ function collectProjectTree(app, settings, parent, maxDepth) {
   return pruneEmptyGroups(collectProjectTreeRaw(app, settings, parent, maxDepth));
 }
 function collectProjectTreeRaw(app, settings, parent, maxDepth) {
+  return walkProjectTrees(app, settings, [parent], maxDepth, { requireTag: true });
+}
+function walkProjectTrees(app, settings, roots, maxDepth, options) {
+  var _a;
   const childrenOf = buildProjectChildrenIndex(app);
+  const accept = (_a = options.accept) != null ? _a : () => true;
   const groups = [];
   const expanded = /* @__PURE__ */ new Set();
   const emitted = /* @__PURE__ */ new Set();
   const groupName = (file) => {
-    var _a, _b;
-    const fm = (_a = app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+    var _a2, _b;
+    const fm = (_a2 = app.metadataCache.getFileCache(file)) == null ? void 0 : _a2.frontmatter;
     return String((_b = fm == null ? void 0 : fm["title"]) != null ? _b : file.basename);
   };
+  const acceptedChildren = (file) => {
+    var _a2;
+    return ((_a2 = childrenOf.get(file.path)) != null ? _a2 : []).filter(accept);
+  };
   const walk = (file, depth) => {
-    var _a, _b;
     if (expanded.has(file.path)) return;
     expanded.add(file.path);
     const tasks = [];
     const subProjects = [];
-    for (const child of (_a = childrenOf.get(file.path)) != null ? _a : []) {
-      const task = taskFromFile(app, child, settings, true);
+    for (const child of acceptedChildren(file)) {
+      const task = taskFromFile(app, child, settings, options.requireTag);
       if (task && !emitted.has(child.path)) {
         tasks.push(task);
         emitted.add(child.path);
       }
-      const hasChildren = ((_b = childrenOf.get(child.path)) != null ? _b : []).length > 0;
+      const hasChildren = acceptedChildren(child).length > 0;
       if (hasChildren && depth < maxDepth && !expanded.has(child.path)) {
         subProjects.push(child);
       }
@@ -329,7 +337,7 @@ function collectProjectTreeRaw(app, settings, parent, maxDepth) {
     groups.push({ name: groupName(file), depth, file, tasks });
     for (const sub of subProjects) walk(sub, depth + 1);
   };
-  walk(parent, 0);
+  for (const root of roots) walk(root, 0);
   return groups;
 }
 function statusFromCheckbox(ch) {
@@ -518,6 +526,14 @@ function assignDepthColors(groups) {
     group.color = GROUP_PALETTE[((_a = group.depth) != null ? _a : 0) % GROUP_PALETTE.length];
   }
 }
+function assignGroupColors(groups) {
+  var _a;
+  let index = -1;
+  for (const group of groups) {
+    if (((_a = group.depth) != null ? _a : 0) === 0 || index < 0) index++;
+    group.color = GROUP_PALETTE[index % GROUP_PALETTE.length];
+  }
+}
 var NO_PROJECT = "(no project)";
 var DEFAULT_COLUMNS = [
   { label: "Task", width: 260, kind: "title", value: (t) => t.title }
@@ -630,6 +646,7 @@ function renderGroupedGantt(app, containerEl, groups, opts) {
     for (const task of group.tasks) {
       renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth, {
         depthColor: group.color,
+        barColor: opts.barsByGroup ? group.color : void 0,
         statusColors,
         priorityMap
       });
@@ -669,7 +686,7 @@ function renderTimeScale(el, rangeStart, totalDays, pxPerDay) {
   }
 }
 function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, timelineWidth, visuals) {
-  var _a;
+  var _a, _b;
   const row = table.createDiv({ cls: "tg-row tg-task" });
   if (visuals.depthColor) {
     row.addClass("tg-has-depth");
@@ -726,10 +743,10 @@ function renderTaskRow(app, table, task, columns, rangeStart, today, pxPerDay, t
   });
   bar.style.left = `${left}px`;
   bar.style.width = `${width}px`;
-  const statusColor = visuals.statusColors.get(task.status.toLowerCase());
-  if (statusColor) {
+  const barColor = (_a = visuals.barColor) != null ? _a : visuals.statusColors.get(task.status.toLowerCase());
+  if (barColor) {
     bar.addClass("tg-bar-colored");
-    bar.style.background = statusColor;
+    bar.style.background = barColor;
   }
   bar.setAttr(
     "aria-label",
@@ -738,7 +755,7 @@ ${formatDate(task.start)} \u2192 ${formatDate(task.end)}${task.endInferred ? " (
 Status: ${task.status || "open"}${task.priority ? `
 Priority: ${task.priority}` : ""}`
   );
-  bar.setAttr("title", (_a = bar.getAttr("aria-label")) != null ? _a : "");
+  bar.setAttr("title", (_b = bar.getAttr("aria-label")) != null ? _b : "");
   if (width >= 60) {
     bar.createSpan({ cls: "tg-bar-label", text: task.title });
   }
@@ -970,6 +987,8 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
     const parent = this.parentNote();
     if (parent) {
       this.renderParentScoped(parent);
+    } else if (this.config.get("subtasks") === true) {
+      this.renderWithSubtasks();
     } else {
       this.renderGrouped();
     }
@@ -994,6 +1013,37 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
       emptyText: `No tasks from this base fall under "${parent.basename}". Tasks belong to a project when their 'projects' frontmatter links to it (directly or through a sub-project within the depth limit).`
     });
   }
+  /**
+   * Sub-task mode: each note from the base is a section, and its sub-tasks are
+   * found vault-wide by following `projects` links (they need not pass the
+   * base's filters), limited by the sub-task tag/folder options.
+   */
+  renderWithSubtasks() {
+    var _a, _b;
+    const tag = String((_a = this.config.get("subtaskTag")) != null ? _a : "").trim();
+    const folder = String((_b = this.config.get("subtaskFolder")) != null ? _b : "").trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+    const accept = (file) => {
+      var _a2;
+      if (folder && !file.path.startsWith(folder + "/")) return false;
+      if (!tag) return true;
+      const fm = (_a2 = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a2.frontmatter;
+      return !!fm && hasTaskTag(fm, tag);
+    };
+    const roots = this.data.data.map((e) => e.file);
+    const groups = pruneEmptyGroups(
+      walkProjectTrees(this.app, this.plugin.settings, roots, this.depth(), {
+        requireTag: false,
+        accept
+      })
+    );
+    assignGroupColors(groups);
+    renderGroupedGantt(this.app, this.rootEl, groups, {
+      pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
+      columns: DEFAULT_COLUMNS,
+      barsByGroup: this.barsByGroup(),
+      emptyText: "No sub-tasks found for the notes in this base. A sub-task is a note whose 'projects' frontmatter links to one of them" + (tag || folder ? " and that matches the sub-task tag/folder options." : ".")
+    });
+  }
   /** Flat mode: one group per the base's group-by value. */
   renderGrouped() {
     const settings = this.plugin.settings;
@@ -1010,9 +1060,11 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
       if (tasks.length === 0) continue;
       groups.push({ name: this.groupLabel(group.key), tasks });
     }
+    if (groups.length > 1) assignGroupColors(groups);
     renderGroupedGantt(this.app, this.rootEl, groups, {
       pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
-      columns: this.buildColumns(entryByPath)
+      columns: this.buildColumns(entryByPath),
+      barsByGroup: groups.length > 1 && this.barsByGroup()
     });
   }
   parentNote() {
@@ -1028,6 +1080,9 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
     const value = Number(this.config.get("depth"));
     if (Number.isFinite(value) && value >= 1) return Math.min(value, 6);
     return this.plugin.settings.maxDepth;
+  }
+  barsByGroup() {
+    return this.config.get("barColor") === "group";
   }
   zoom() {
     const value = this.config.get("zoom");
@@ -1074,11 +1129,36 @@ function ganttBasesOptions() {
       filter: (file) => file.extension === "md"
     },
     {
+      type: "toggle",
+      key: "subtasks",
+      displayName: "Show sub-tasks",
+      default: false
+    },
+    {
+      type: "text",
+      key: "subtaskTag",
+      displayName: "Sub-task tag",
+      placeholder: "Optional \u2014 e.g. node"
+    },
+    {
+      type: "folder",
+      key: "subtaskFolder",
+      displayName: "Sub-task folder",
+      placeholder: "Optional \u2014 e.g. Calendar/TaskNotes/Tasks"
+    },
+    {
       type: "dropdown",
       key: "depth",
       displayName: "Sub-project depth",
       default: "3",
       options: { "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6" }
+    },
+    {
+      type: "dropdown",
+      key: "barColor",
+      displayName: "Bar color",
+      default: "status",
+      options: { status: "Status", group: "Group" }
     },
     {
       type: "dropdown",

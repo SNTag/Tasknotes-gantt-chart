@@ -5,15 +5,18 @@ import { ZoomLevel, ZOOM_PX_PER_DAY } from "./settings";
 import {
 	GanttTask,
 	collectProjectTree,
+	hasTaskTag,
 	projectDisplayName,
 	pruneEmptyGroups,
 	taskFromFile,
+	walkProjectTrees,
 } from "./tasks";
 import {
 	Column,
 	DEFAULT_COLUMNS,
 	GanttGroup,
 	assignDepthColors,
+	assignGroupColors,
 	renderGroupedGantt,
 } from "./render";
 
@@ -45,6 +48,8 @@ export class GanttBasesView extends BasesView {
 		const parent = this.parentNote();
 		if (parent) {
 			this.renderParentScoped(parent);
+		} else if (this.config.get("subtasks") === true) {
+			this.renderWithSubtasks();
 		} else {
 			this.renderGrouped();
 		}
@@ -71,6 +76,41 @@ export class GanttBasesView extends BasesView {
 		});
 	}
 
+	/**
+	 * Sub-task mode: each note from the base is a section, and its sub-tasks are
+	 * found vault-wide by following `projects` links (they need not pass the
+	 * base's filters), limited by the sub-task tag/folder options.
+	 */
+	private renderWithSubtasks(): void {
+		const tag = String(this.config.get("subtaskTag") ?? "").trim();
+		const folder = String(this.config.get("subtaskFolder") ?? "")
+			.trim()
+			.replace(/\\/g, "/")
+			.replace(/^\/+|\/+$/g, "");
+		const accept = (file: TFile): boolean => {
+			if (folder && !file.path.startsWith(folder + "/")) return false;
+			if (!tag) return true;
+			const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+			return !!fm && hasTaskTag(fm, tag);
+		};
+		const roots = this.data.data.map((e) => e.file);
+		const groups = pruneEmptyGroups(
+			walkProjectTrees(this.app, this.plugin.settings, roots, this.depth(), {
+				requireTag: false,
+				accept,
+			})
+		);
+		assignGroupColors(groups);
+		renderGroupedGantt(this.app, this.rootEl, groups, {
+			pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
+			columns: DEFAULT_COLUMNS,
+			barsByGroup: this.barsByGroup(),
+			emptyText:
+				"No sub-tasks found for the notes in this base. A sub-task is a note whose 'projects' frontmatter links to one of them" +
+				(tag || folder ? " and that matches the sub-task tag/folder options." : "."),
+		});
+	}
+
 	/** Flat mode: one group per the base's group-by value. */
 	private renderGrouped(): void {
 		const settings = this.plugin.settings;
@@ -90,9 +130,11 @@ export class GanttBasesView extends BasesView {
 			groups.push({ name: this.groupLabel(group.key), tasks });
 		}
 
+		if (groups.length > 1) assignGroupColors(groups);
 		renderGroupedGantt(this.app, this.rootEl, groups, {
 			pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
 			columns: this.buildColumns(entryByPath),
+			barsByGroup: groups.length > 1 && this.barsByGroup(),
 		});
 	}
 
@@ -110,6 +152,10 @@ export class GanttBasesView extends BasesView {
 		const value = Number(this.config.get("depth"));
 		if (Number.isFinite(value) && value >= 1) return Math.min(value, 6);
 		return this.plugin.settings.maxDepth;
+	}
+
+	private barsByGroup(): boolean {
+		return this.config.get("barColor") === "group";
 	}
 
 	private zoom(): ZoomLevel {
@@ -161,11 +207,36 @@ export function ganttBasesOptions(): BasesAllOptions[] {
 			filter: (file: TFile) => file.extension === "md",
 		},
 		{
+			type: "toggle",
+			key: "subtasks",
+			displayName: "Show sub-tasks",
+			default: false,
+		},
+		{
+			type: "text",
+			key: "subtaskTag",
+			displayName: "Sub-task tag",
+			placeholder: "Optional — e.g. node",
+		},
+		{
+			type: "folder",
+			key: "subtaskFolder",
+			displayName: "Sub-task folder",
+			placeholder: "Optional — e.g. Calendar/TaskNotes/Tasks",
+		},
+		{
 			type: "dropdown",
 			key: "depth",
 			displayName: "Sub-project depth",
 			default: "3",
 			options: { "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6" },
+		},
+		{
+			type: "dropdown",
+			key: "barColor",
+			displayName: "Bar color",
+			default: "status",
+			options: { status: "Status", group: "Group" },
 		},
 		{
 			type: "dropdown",
