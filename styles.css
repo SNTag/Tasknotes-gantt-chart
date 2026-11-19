@@ -379,3 +379,14 @@
 	text-overflow: ellipsis;
 	mix-blend-mode: normal;
 }
+
+.tg-next-due {
+	margin-left: 8px;
+	font-size: var(--font-ui-smaller);
+	font-weight: normal;
+	color: var(--text-muted);
+}
+
+.tg-next-due-overdue {
+	color: var(--text-error);
+}

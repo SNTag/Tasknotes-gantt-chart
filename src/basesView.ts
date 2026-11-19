@@ -8,6 +8,7 @@ import {
 	hasTaskTag,
 	projectDisplayName,
 	pruneEmptyGroups,
+	sortSectionsByNextDue,
 	taskFromFile,
 	walkProjectTrees,
 } from "./tasks";
@@ -94,12 +95,13 @@ export class GanttBasesView extends BasesView {
 			return !!fm && hasTaskTag(fm, tag);
 		};
 		const roots = this.data.data.map((e) => e.file);
-		const groups = pruneEmptyGroups(
+		let groups = pruneEmptyGroups(
 			walkProjectTrees(this.app, this.plugin.settings, roots, this.depth(), {
 				requireTag: false,
 				accept,
 			})
 		);
+		if (this.config.get("sortByNextDue") === true) groups = sortSectionsByNextDue(groups);
 		assignGroupColors(groups);
 		renderGroupedGantt(this.app, this.rootEl, groups, {
 			pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
@@ -223,6 +225,12 @@ export function ganttBasesOptions(): BasesAllOptions[] {
 			key: "subtaskFolder",
 			displayName: "Sub-task folder",
 			placeholder: "Optional — e.g. Calendar/TaskNotes/Tasks",
+		},
+		{
+			type: "toggle",
+			key: "sortByNextDue",
+			displayName: "Sort sections by next due sub-task",
+			default: false,
 		},
 		{
 			type: "dropdown",

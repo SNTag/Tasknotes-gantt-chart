@@ -264,7 +264,8 @@ function taskFromFile(app, file, settings, requireTag) {
     projects: asArray((_f = fm["projects"]) != null ? _f : fm["project"]).map(projectDisplayName),
     start,
     end,
-    endInferred
+    endInferred,
+    due: parseDate(fm["due"])
   };
 }
 function buildProjectChildrenIndex(app) {
@@ -446,6 +447,26 @@ function pruneEmptyGroups(groups) {
     }
   }
   return groups.filter((_, i) => keep[i]);
+}
+function sortSectionsByNextDue(groups) {
+  const blocks = [];
+  for (const group of groups) {
+    if (group.depth === 0 || blocks.length === 0) blocks.push({ groups: [], nextDue: null });
+    const block = blocks[blocks.length - 1];
+    block.groups.push(group);
+    for (const task of group.tasks) {
+      if (!task.due || task.statusKind === "done" || task.statusKind === "cancelled") continue;
+      if (!block.nextDue || task.due < block.nextDue) block.nextDue = task.due;
+    }
+  }
+  for (const block of blocks) block.groups[0].nextDue = block.nextDue;
+  blocks.sort((a, b) => {
+    if (a.nextDue && b.nextDue) return a.nextDue.getTime() - b.nextDue.getTime();
+    if (a.nextDue) return -1;
+    if (b.nextDue) return 1;
+    return 0;
+  });
+  return blocks.flatMap((b) => b.groups);
 }
 
 // src/tasknotesData.ts
@@ -641,6 +662,13 @@ function renderGroupedGantt(app, containerEl, groups, opts) {
       } else {
         nameCell.setText(label);
       }
+      if (group.nextDue) {
+        const overdue = group.nextDue < today;
+        nameCell.createSpan({
+          cls: "tg-next-due" + (overdue ? " tg-next-due-overdue" : ""),
+          text: `next due ${formatShortDate(group.nextDue)}`
+        });
+      }
       groupRow.createDiv({ cls: "tg-timeline" }).style.width = `${timelineWidth}px`;
     }
     for (const task of group.tasks) {
@@ -772,6 +800,10 @@ function checkboxGlyph(kind) {
     default:
       return "\u2610";
   }
+}
+function formatShortDate(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 // src/view.ts
@@ -1030,12 +1062,13 @@ var GanttBasesView = class extends import_obsidian3.BasesView {
       return !!fm && hasTaskTag(fm, tag);
     };
     const roots = this.data.data.map((e) => e.file);
-    const groups = pruneEmptyGroups(
+    let groups = pruneEmptyGroups(
       walkProjectTrees(this.app, this.plugin.settings, roots, this.depth(), {
         requireTag: false,
         accept
       })
     );
+    if (this.config.get("sortByNextDue") === true) groups = sortSectionsByNextDue(groups);
     assignGroupColors(groups);
     renderGroupedGantt(this.app, this.rootEl, groups, {
       pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
@@ -1145,6 +1178,12 @@ function ganttBasesOptions() {
       key: "subtaskFolder",
       displayName: "Sub-task folder",
       placeholder: "Optional \u2014 e.g. Calendar/TaskNotes/Tasks"
+    },
+    {
+      type: "toggle",
+      key: "sortByNextDue",
+      displayName: "Sort sections by next due sub-task",
+      default: false
     },
     {
       type: "dropdown",

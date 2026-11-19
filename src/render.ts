@@ -32,6 +32,8 @@ export interface GanttGroup {
 	file?: TFile;
 	/** CSS color applied to this group's bars and header dot. */
 	color?: string;
+	/** Next open due date, shown beside the header when set. */
+	nextDue?: Date | null;
 }
 
 const GROUP_PALETTE = [
@@ -214,6 +216,13 @@ export function renderGroupedGantt(
 			} else {
 				nameCell.setText(label);
 			}
+			if (group.nextDue) {
+				const overdue = group.nextDue < today;
+				nameCell.createSpan({
+					cls: "tg-next-due" + (overdue ? " tg-next-due-overdue" : ""),
+					text: `next due ${formatShortDate(group.nextDue)}`,
+				});
+			}
 			groupRow.createDiv({ cls: "tg-timeline" }).style.width = `${timelineWidth}px`;
 		}
 		for (const task of group.tasks) {
@@ -390,4 +399,9 @@ function checkboxGlyph(kind: GanttTask["statusKind"]): string {
 		default:
 			return "☐";
 	}
+}
+
+function formatShortDate(d: Date): string {
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }

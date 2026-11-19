@@ -109,6 +109,8 @@ Two optional view options narrow what counts as a sub-task:
 - **Sub-task tag** — e.g. `node`; only notes with this frontmatter tag are followed.
 - **Sub-task folder** — e.g. `Calendar/TaskNotes/Tasks`; only notes inside this folder are followed.
 
+Turn on **Sort sections by next due sub-task** (`sortByNextDue: true`) to order the top-level sections by urgency: each section's key is the earliest `due` frontmatter date among its sub-tasks (at any nesting level) whose status is not done or cancelled. Sooner (including overdue) comes first, the date is shown beside the section name (in red when overdue), and sections with no open dated sub-task go last. The base's own `sort` breaks ties and orders the undated sections. Only the `due` field counts; a bar that merely runs to today because it has no end date does not.
+
 Each top-level section gets its own color (row tint, accent and header dot), shared by the sub-sections nested under it. Set **Bar color** to *Group* to fill the bars with that color too instead of the status color.
 
 Notes from the base with no matching sub-tasks are hidden. In YAML:
@@ -125,6 +127,7 @@ views:
     subtaskTag: node
     subtaskFolder: Calendar/TaskNotes/Tasks
     depth: "3"
+    sortByNextDue: true
     barColor: group
 ```
 
