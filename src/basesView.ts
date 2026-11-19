@@ -6,8 +6,11 @@ import {
 	GanttTask,
 	collectProjectTree,
 	hasTaskTag,
+	monthsAgo,
 	projectDisplayName,
 	pruneEmptyGroups,
+	sortSectionsByNextDue,
+	startOfDay,
 	taskFromFile,
 	walkProjectTrees,
 } from "./tasks";
@@ -94,12 +97,15 @@ export class GanttBasesView extends BasesView {
 			return !!fm && hasTaskTag(fm, tag);
 		};
 		const roots = this.data.data.map((e) => e.file);
-		const groups = pruneEmptyGroups(
+		let groups = pruneEmptyGroups(
 			walkProjectTrees(this.app, this.plugin.settings, roots, this.depth(), {
 				requireTag: false,
 				accept,
 			})
 		);
+		if (this.config.get("sortByNextDue") === true) {
+			groups = sortSectionsByNextDue(groups, this.nextDueCutoff());
+		}
 		assignGroupColors(groups);
 		renderGroupedGantt(this.app, this.rootEl, groups, {
 			pxPerDay: ZOOM_PX_PER_DAY[this.zoom()],
@@ -152,6 +158,14 @@ export class GanttBasesView extends BasesView {
 		const value = Number(this.config.get("depth"));
 		if (Number.isFinite(value) && value >= 1) return Math.min(value, 6);
 		return this.plugin.settings.maxDepth;
+	}
+
+	/** Earliest due date still counted for next-due sorting; null = no limit. */
+	private nextDueCutoff(): Date | null {
+		const raw = this.config.get("nextDueMaxAge");
+		const months = raw == null || raw === "" ? 3 : Number(raw);
+		if (!Number.isFinite(months) || months <= 0) return null;
+		return monthsAgo(startOfDay(new Date()), months);
 	}
 
 	private barsByGroup(): boolean {
@@ -223,6 +237,19 @@ export function ganttBasesOptions(): BasesAllOptions[] {
 			key: "subtaskFolder",
 			displayName: "Sub-task folder",
 			placeholder: "Optional — e.g. Calendar/TaskNotes/Tasks",
+		},
+		{
+			type: "toggle",
+			key: "sortByNextDue",
+			displayName: "Sort sections by next due sub-task",
+			default: false,
+		},
+		{
+			type: "dropdown",
+			key: "nextDueMaxAge",
+			displayName: "Ignore sub-tasks overdue by more than",
+			default: "3",
+			options: { "1": "1 month", "3": "3 months", "6": "6 months", "12": "12 months", "0": "No limit" },
 		},
 		{
 			type: "dropdown",
