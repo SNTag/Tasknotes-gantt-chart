@@ -451,10 +451,15 @@ export function pruneEmptyGroups(groups: ProjectGroup[]): ProjectGroup[] {
  * Reorder top-level sections (depth 0, each carried with the nested sections
  * that follow it) by the earliest `due` date among their open tasks, i.e. tasks
  * whose status is neither done nor cancelled, anywhere in the subtree.
+ * Tasks due before `notBefore` (when given) are ignored, so long-stale
+ * overdue tasks don't pin a section to the top.
  * Sections without such a task go last. The sort is stable, so ties and the
  * undated sections keep their incoming order (the base's own sort).
  */
-export function sortSectionsByNextDue(groups: ProjectGroup[]): ProjectGroup[] {
+export function sortSectionsByNextDue(
+	groups: ProjectGroup[],
+	notBefore: Date | null = null
+): ProjectGroup[] {
 	const blocks: { groups: ProjectGroup[]; nextDue: Date | null }[] = [];
 	for (const group of groups) {
 		if (group.depth === 0 || blocks.length === 0) blocks.push({ groups: [], nextDue: null });
@@ -462,6 +467,7 @@ export function sortSectionsByNextDue(groups: ProjectGroup[]): ProjectGroup[] {
 		block.groups.push(group);
 		for (const task of group.tasks) {
 			if (!task.due || task.statusKind === "done" || task.statusKind === "cancelled") continue;
+			if (notBefore && task.due < notBefore) continue;
 			if (!block.nextDue || task.due < block.nextDue) block.nextDue = task.due;
 		}
 	}
@@ -473,4 +479,11 @@ export function sortSectionsByNextDue(groups: ProjectGroup[]): ProjectGroup[] {
 		return 0;
 	});
 	return blocks.flatMap((b) => b.groups);
+}
+
+/** Start of the day `months` calendar months before `from` (clamped to month end). */
+export function monthsAgo(from: Date, months: number): Date {
+	const target = new Date(from.getFullYear(), from.getMonth() - months, 1);
+	const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+	return new Date(target.getFullYear(), target.getMonth(), Math.min(from.getDate(), lastDay));
 }

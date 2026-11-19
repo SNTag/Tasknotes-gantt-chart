@@ -109,7 +109,7 @@ Two optional view options narrow what counts as a sub-task:
 - **Sub-task tag** — e.g. `node`; only notes with this frontmatter tag are followed.
 - **Sub-task folder** — e.g. `Calendar/TaskNotes/Tasks`; only notes inside this folder are followed.
 
-Turn on **Sort sections by next due sub-task** (`sortByNextDue: true`) to order the top-level sections by urgency: each section's key is the earliest `due` frontmatter date among its sub-tasks (at any nesting level) whose status is not done or cancelled. Sooner (including overdue) comes first, the date is shown beside the section name (in red when overdue), and sections with no open dated sub-task go last. The base's own `sort` breaks ties and orders the undated sections. Only the `due` field counts; a bar that merely runs to today because it has no end date does not.
+Turn on **Sort sections by next due sub-task** (`sortByNextDue: true`) to order the top-level sections by urgency: each section's key is the earliest `due` frontmatter date among its sub-tasks (at any nesting level) whose status is not done or cancelled. Sooner (including overdue) comes first, the date is shown beside the section name (in red when overdue), and sections with no open dated sub-task go last. The base's own `sort` breaks ties and orders the undated sections. Only the `due` field counts; a bar that merely runs to today because it has no end date does not. Sub-tasks overdue by more than **Ignore sub-tasks overdue by more than** (`nextDueMaxAge`, in months; default `"3"`, `"0"` for no limit) are skipped, so long-forgotten tasks don't keep a section pinned to the top.
 
 Each top-level section gets its own color (row tint, accent and header dot), shared by the sub-sections nested under it. Set **Bar color** to *Group* to fill the bars with that color too instead of the status color.
 
@@ -128,6 +128,7 @@ views:
     subtaskFolder: Calendar/TaskNotes/Tasks
     depth: "3"
     sortByNextDue: true
+    nextDueMaxAge: "3"
     barColor: group
 ```
 
